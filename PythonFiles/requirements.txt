@@ -1,2 +1,3 @@
+keras
 pyzmq==17.1.2
 zmq==0.0.0

@@ -5,6 +5,7 @@ using NetMQ.Sockets;
 using UnityEngine;
 using System.Collections;
 using System.IO;
+using System.Text;
 
 public class HelloClient : MonoBehaviour
 {
@@ -19,6 +20,8 @@ public class HelloClient : MonoBehaviour
         {
             //Create a new texture with the width and height of the screen
             Texture2D texture = new Texture2D(256, 256, TextureFormat.RGB24, false);
+            Message send = new Message(Globals.moveDir, Globals.reward, Globals.hasReachedGoal, Globals.rays, Globals.done, Globals.distanceToGoal, Globals.originalDistanceToGoal);
+ 
             //Read the pixels in the Rect starting at 0,0 and ending at the screen's width and height
             texture.ReadPixels(new Rect(0, 0, 256, 256), 0, 0, false);
             texture.Apply();
@@ -30,7 +33,8 @@ public class HelloClient : MonoBehaviour
             // For testing purposes, also write to a file in the project folder, if you want to save the image directly from Unity, use this.
             //File.WriteAllBytes(Application.dataPath + "SavedScreen.png", current_img);
 
-            _helloRequester.bytes = current_img;
+            byte[] array = Encoding.ASCII.GetBytes(JsonUtility.ToJson(send));
+            _helloRequester.bytes = array;
             _helloRequester.Continue();
         }
         else if (!SendPack)

@@ -7,6 +7,10 @@
 /[Bb]uilds/
 /[Ll]ogs/
 
+PythonFiles/venv/**/*
+
+PythonFiles/.idea/workspace.xml
+
 # Never ignore Asset meta data
 !/[Aa]ssets/**/*.meta
 

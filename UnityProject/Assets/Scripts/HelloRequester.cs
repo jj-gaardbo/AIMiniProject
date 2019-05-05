@@ -4,15 +4,14 @@ using NetMQ.Sockets;
 using System;
 using UnityEngine;
 
-
 ///     You can copy this class and modify Run() to suits your needs.
 ///     To use this class, you just instantiate, call Start() when you want to start and Stop() when you want to stop.
-
 
 public class HelloRequester : RunAbleThread
 {
     public byte[] bytes;
     ///     Stop requesting when Running=false.
+
     protected override void Run()
     {
         ForceDotNet.Force(); 
@@ -35,7 +34,12 @@ public class HelloRequester : RunAbleThread
                         gotMessage = client.TryReceiveFrameString(out message); // this returns true if it's successful
                         if (gotMessage) break;
                     }
-                    if (gotMessage) Debug.Log("Received " + message);
+
+                    if (gotMessage){
+                        Message jsonMessage = JsonUtility.FromJson<Message>(message);
+                        Globals.setMoveDir(jsonMessage.move);
+                        Globals.updateReward(jsonMessage.reward);
+                    }
                 }       
             }
         }
