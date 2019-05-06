@@ -426,6 +426,7 @@ GameObject:
   - component: {fileID: 401799483}
   - component: {fileID: 401799482}
   - component: {fileID: 401799487}
+  - component: {fileID: 401799488}
   m_Layer: 0
   m_Name: Capsule
   m_TagString: Player
@@ -446,8 +447,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rayLength: 5
-  speed: 3
-  gravity: 20
+  speed: 40
+  gravity: 0
 --- !u!136 &401799483
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -515,7 +516,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 401799481}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.07, z: -8.76}
+  m_LocalPosition: {x: 0, y: 1.07, z: -8.77}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 1401230877}
@@ -541,6 +542,22 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!54 &401799488
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 401799481}
+  serializedVersion: 2
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 116
+  m_CollisionDetection: 0
 --- !u!1 &514567753
 GameObject:
   m_ObjectHideFlags: 0
@@ -716,7 +733,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &556487126
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -807,7 +824,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &665262326
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -5596,7 +5613,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &1017486896
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -5945,7 +5962,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &1568660528
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -6036,7 +6053,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &1760996030
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -6188,7 +6205,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &1993153933
 BoxCollider:
   m_ObjectHideFlags: 0

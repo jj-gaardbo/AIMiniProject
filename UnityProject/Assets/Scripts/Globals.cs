@@ -5,6 +5,10 @@ using UnityEngine;
 public static class Globals{
     public static string moveDir;
     public static GameObject player;
+    public static Transform playerInitialTransform;
+    public static Vector3 playerInitialPosition;
+    public static Quaternion playerInitialRotation;
+
     public static float reward = 1.0f;
     public static bool hasReachedGoal = false;
     public static float[] rays;
@@ -44,14 +48,23 @@ public static class Globals{
 
     public static void setMoveDir(string dir){
         moveDir = dir;
-        Debug.Log("MoveDir " + moveDir);
     }
 
-    public static void setPlayer(GameObject playerObject){
+    public static void setPlayer(GameObject playerObject, Transform initialTransform, Vector3 initialPosition, Quaternion initialRotation){
         player = playerObject;
+        playerInitialTransform = initialTransform;
+        playerInitialPosition = initialPosition;
+        playerInitialRotation = initialRotation;
     }
 
     public static GameObject getPlayer(){
         return player;
     }
+
+    public static void resetPlayer(){
+        player.transform.position = playerInitialPosition;
+        player.transform.rotation = playerInitialRotation;
+    }
+
+
 }

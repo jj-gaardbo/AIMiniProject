@@ -9,8 +9,9 @@ public class MoveScript : MonoBehaviour
 
     Rigidbody rb;
 
-    private Vector3 initialPosition;
-    private Quaternion initialRotation;
+    public static Transform initialTransform;
+    public static Vector3 initialPosition;
+    public static Quaternion initialRotation;
 
     public float rayLength = 5f;
 
@@ -24,9 +25,12 @@ public class MoveScript : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        initialTransform = transform;
         initialPosition = transform.position;
         initialRotation = transform.rotation;
         characterController = GetComponent<CharacterController>();
+
+        Globals.setPlayer(gameObject, initialTransform, initialPosition, initialRotation);
 
         GameObject goal = GameObject.FindGameObjectWithTag("Finish");
         Globals.setOriginalDistanceToGoal(Vector3.Distance(gameObject.transform.position, goal.transform.position));
@@ -37,7 +41,7 @@ public class MoveScript : MonoBehaviour
     {
 
         Move();
-        Globals.setRays(new float[] {CastRay(-2), CastRay(-1), CastRay(0), CastRay(1), CastRay(2)});
+        Globals.setRays(new float[] {CastRay(-2), CastRay(-1), CastRay(0), CastRay(1), CastRay(2), CastRay(3)});
 
         if (characterController.isGrounded)
         {
@@ -51,31 +55,21 @@ public class MoveScript : MonoBehaviour
             Globals.goalReached();
         }
 
-        checkState();
-
         if(Globals.done){
             resetProgram();
         }
     }
 
-    public void resetProgram(){
-        transform.position = initialPosition;
-        transform.rotation = initialRotation;
+    public static void resetProgram(){
+        Debug.Log("Resetting program");
+        Globals.resetPlayer();
         Globals.done = false;
-    }
-
-    public void checkState(){
-        for(int i = 0; i < Globals.rays.Length; i++){
-            if(Globals.rays[i] < 1){
-                Globals.setDone();
-            }
-        }
     }
 
     public void Move(){
         string direction = Globals.moveDir;
         if(direction == null){
-            direction = "l";
+            direction = "f";
         }
         GameObject player = gameObject;
         
@@ -153,6 +147,12 @@ public class MoveScript : MonoBehaviour
             case -1:
                 if (Physics.Raycast(transform.position, (left + fwd).normalized, out hit, rayLength)) {
                     Debug.DrawRay(transform.position, transform.TransformDirection((left + fwd).normalized) * hit.distance, Color.red);
+                    length = hit.distance;
+                }
+            break;
+            case 3:
+                if (Physics.Raycast(transform.position, back.normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((back).normalized) * hit.distance, Color.red);
                     length = hit.distance;
                 }
             break;

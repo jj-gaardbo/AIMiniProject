@@ -12,6 +12,22 @@ context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
 
+globalMessage = None
+timeout = time
+
+def translate_action(action):
+    if action == 0:
+        return 'f'
+    elif action == 1:
+        return 'l'
+    elif action == 2:
+        return 'r'
+    elif action == 3:
+        return 'b'
+    else:
+        return 'f'
+
+
 class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
@@ -56,7 +72,7 @@ class DQNAgent():
             self.model.fit(state, target_f, epochs=1, verbose=0)
 
         # We have to decrease the epsilon each time to make the actions less and less random
-        if self.epsilon > self.epsilon_min and episode % 10 == 0:
+        if self.epsilon > self.epsilon_min and episode % 20 == 0:
             self.epsilon *= self.epsilon_decay
 
 
@@ -107,36 +123,17 @@ def handleRays(data):
     front = data.rays[2]
     right = data.rays[3]
     rightfar = data.rays[4]
+    back = data.rays[5]
 
     for ray in data.rays:
-        if ray < 0.5:
-            reward -= 0.2
+        if ray < 1:
+            reward -= 10
+        elif ray < 5:
+            reward -= abs(5-ray)
+        elif ray == 5:
+            reward += 1
 
-    if leftfar < 1 and left < 1:
-        data.move = "r"
-        reward -= 0.5
-    elif leftfar < 1:
-        data.move = "r"
-        reward -= 0.01
-    elif left < 1:
-        data.move = "r"
-        reward -= 0.01
-    elif front < 1:
-        data.move = "b"
-        reward -= 0.01
-    elif right < 1 and rightfar < 1:
-        data.move = "l"
-        reward -= 0.5
-    elif rightfar < 1:
-        data.move = "l"
-        reward -= 0.01
-    elif right < 1:
-        data.move = "l"
-        reward -= 0.01
-    else:
-        data.move = "f"
-
-    return data, reward
+    return reward
 
 
 def calculate_reward(message):
@@ -146,16 +143,27 @@ def calculate_reward(message):
         reward += 100
 
     if message.distanceToGoal > message.origDistanceToGoal:
-        reward -= 0.1
+        reward -= 2*abs(message.origDistanceToGoal-message.distanceToGoal)
+    elif message.distanceToGoal < message.origDistanceToGoal:
+        reward += 4*abs(message.origDistanceToGoal-message.distanceToGoal)
 
-    if message.distanceToGoal > message.origDistanceToGoal:
-        reward += 0.1
-
-    message, rayReward = handleRays(message)
+    rayReward = handleRays(message)
 
     reward += rayReward
 
-    return message, reward
+    return reward
+
+
+def is_done(message):
+    isDone = False
+    for ray in message.rays:
+        if float(ray) <= 0.7:
+            isDone = True
+            break
+        else:
+            isDone = False
+
+    return isDone
 
 
 #calculate state and next state. Look at openAI documentation
@@ -165,49 +173,109 @@ def calculate_reward(message):
 
 #(curriculum learning)
 
-state_size = 4
+state_size = 7
 action_size = 4
 agent = DQNAgent(state_size, action_size)
+batch_size = 32
+def get_next_state(distance, origDistance, rays):
+    reward = 0
+    if distance > origDistance:
+        reward -= 1
+    else:
+        reward += 1
+
+    iterator = 0
+    rayRewards = [0, 0, 0, 0, 0, 0]
+    for ray in rays:
+        if ray < 1:
+            rayRewards[iterator] -= 5
+        elif ray < 5:
+            rayRewards[iterator] -= abs(5-ray)
+        elif ray == 5:
+            rayRewards[iterator] += 1
+        iterator += 1
+
+    return np.array([[reward, rayRewards[0], rayRewards[1], rayRewards[2], rayRewards[3], rayRewards[4], rayRewards[5]]])
+
+
+def update_message(message):
+    #  Send reply back to client
+    #  In the real world usage, after you finish your work, send your output here
+    newMessage = Message(message.move,
+                      message.reward,
+                      message.hasReachedGoal,
+                      message.rays,
+                      message.done,
+                      message.distanceToGoal,
+                      message.origDistanceToGoal)
+    socket.send_string(newMessage.to_string())
+    incoming = handleJsonResponse(socket.recv())
+    timeout.sleep(0.1)
+    return incoming
+
+
+def reset_program(message):
+    newMessage = Message(message.move,
+                         message.reward,
+                         message.hasReachedGoal,
+                         message.rays,
+                         True,
+                         message.distanceToGoal,
+                         message.origDistanceToGoal)
+    socket.send_string(newMessage.to_string())
+    globalMessage = handleJsonResponse(socket.recv())
+    globalMessage.move = 'f'
+    timeout.sleep(0.1)
+    return globalMessage
+
+
 while True:
 
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
+    globalMessage = incoming
 
-    done = False
-    batch_size = 32
+    state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5]]])
+
     for iter in range(500):
-        state = 0
-        #state = np.reshape(state, [1, state_size])
+        state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5]]])
+
+        state = np.reshape(state, [1, state_size])
 
         # Learning goes on here
         # We make sure that the agent does not get stuck
         for time in range(500):
+            if not globalMessage.done:
 
-            action = agent.act(state)
-            next_state = 0
-            incoming, reward = calculate_reward(incoming)
-            done = incoming.done
+                action = agent.act(state)
+                globalMessage.move = translate_action(action)
+                globalMessage = update_message(globalMessage)
 
-            # Give a penalty if agent is just still
-            reward = reward if not done else -10
+                next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage.rays)
+                reward = calculate_reward(globalMessage)
 
-            #next_state = np.reshape(next_state, [1, state_size])
+                done = is_done(globalMessage)
 
-            # We want the agent to remember
-            agent.mem_remember(state, action, reward, next_state, done)
+                # Give a penalty if agent is just still
+                reward = reward if not done else -10
 
-            state = next_state
+                print(reward)
 
-            if done:
-                print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
-                break
+                # We want the agent to remember
+                agent.mem_remember(state, action, reward, next_state, done)
 
-            #if len(agent.memory) > batch_size: #agent.train_replay(batch_size, iter)
+                next_state = np.reshape(state, [1, state_size])
 
-    #  Send reply back to client
-    #  In the real world usage, after you finish your work, send your output here
-    message = Message(incoming.move, 1, incoming.hasReachedGoal, incoming.rays, incoming.done, incoming.distanceToGoal, incoming.origDistanceToGoal)
-    socket.send_string(message.to_string())
+                state = next_state
+
+                if done:
+                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
+                    globalMessage = reset_program(globalMessage)
+                    break
+
+                if len(agent.memory) > batch_size:
+                    agent.train_replay(batch_size, iter)
+
 
 
 
