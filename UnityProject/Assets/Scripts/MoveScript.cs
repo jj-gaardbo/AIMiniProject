@@ -28,7 +28,6 @@ public class MoveScript : MonoBehaviour
         initialTransform = transform;
         initialPosition = transform.position;
         initialRotation = transform.rotation;
-        characterController = GetComponent<CharacterController>();
 
         Globals.setPlayer(gameObject, initialTransform, initialPosition, initialRotation);
 
@@ -42,14 +41,7 @@ public class MoveScript : MonoBehaviour
 
         Move();
         Globals.setRays(new float[] {CastRay(-2), CastRay(-1), CastRay(0), CastRay(1), CastRay(2), CastRay(3)});
-
-        if (characterController.isGrounded)
-        {
-            moveDirection = new Vector3(Input.GetAxis("Horizontal"), 0.0f, Input.GetAxis("Vertical"));
-            moveDirection *= speed;
-        }
-        moveDirection.y -= gravity * Time.deltaTime;
-        characterController.Move(moveDirection * Time.deltaTime);
+        
 
         if(HasReachedGoal()){
             Globals.goalReached();
@@ -90,6 +82,7 @@ public class MoveScript : MonoBehaviour
                 moveDirection = player.transform.TransformDirection(Vector3.right);
                 break;                
         }
+        moveDirection *= speed;
         characterController.Move(moveDirection * Time.deltaTime);
     }
 
