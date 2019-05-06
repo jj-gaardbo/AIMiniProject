@@ -45,6 +45,7 @@ public class MoveScript : MonoBehaviour
 
         if(HasReachedGoal()){
             Globals.goalReached();
+            resetProgram();
         }
 
         if(Globals.done){
@@ -55,6 +56,7 @@ public class MoveScript : MonoBehaviour
     public static void resetProgram(){
         Debug.Log("Resetting program");
         Globals.resetPlayer();
+        Globals.hasReachedGoal = false;
         Globals.done = false;
     }
 

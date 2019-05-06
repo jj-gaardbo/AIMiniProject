@@ -20,7 +20,7 @@ action_size = 4
 batch_size = 32
 num_of_episodes = 2000
 epsilon_decrease_factor = 10
-movement_factor = 0.1
+movement_factor = 0.5
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
@@ -68,7 +68,7 @@ class DQNAgent():
         # We have to decrease the epsilon each time to make the actions less and less random
         if self.epsilon > self.epsilon_min:
             if episode % epsilon_decrease_factor == 0:
-                print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
+                #print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
                 self.epsilon *= self.epsilon_decay
 
 
@@ -141,13 +141,13 @@ def translate_action(action):
 def calculate_reward(message):
     reward = 0
 
-    if message.hasReachedGoal:
-        reward += 100
-
     if message.distanceToGoal > message.origDistanceToGoal:
-        reward -= 2*abs(message.origDistanceToGoal-message.distanceToGoal)
+        reward -= abs(message.origDistanceToGoal-message.distanceToGoal)
     elif message.distanceToGoal < message.origDistanceToGoal:
-        reward += 4*abs(message.origDistanceToGoal-message.distanceToGoal)
+        reward += abs(message.origDistanceToGoal-message.distanceToGoal)
+
+    if message.hasReachedGoal:
+        reward += 1000
 
     rayReward = handleRays(message)
 
@@ -158,12 +158,17 @@ def calculate_reward(message):
 
 def is_done(message):
     isDone = False
+
     for ray in message.rays:
         if float(ray) <= 0.7:
             isDone = True
             break
         else:
             isDone = False
+
+    if message.hasReachedGoal:
+        message.hasReachedGoal = False
+        isDone = True
 
     return isDone
 
@@ -218,7 +223,7 @@ def update_message(message):
 def reset_program(message):
     newMessage = Message(message.move,
                          message.reward,
-                         message.hasReachedGoal,
+                         False,
                          message.rays,
                          True,
                          message.distanceToGoal,
@@ -226,6 +231,7 @@ def reset_program(message):
     socket.send_string(newMessage.to_string())
     globalMessage = handleJsonResponse(socket.recv())
     globalMessage.move = 'f'
+    globalMessage.reward = 0
     timeout.sleep(0.1)
     return globalMessage
 
@@ -256,9 +262,9 @@ while True:
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
-                reward = reward if not done else -100
+                reward = reward if not done else -10
 
-                print(reward)
+                #print(reward)
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
 

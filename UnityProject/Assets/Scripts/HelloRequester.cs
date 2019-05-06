@@ -38,8 +38,6 @@ public class HelloRequester : RunAbleThread
                     if (gotMessage){
                         Message jsonMessage = JsonUtility.FromJson<Message>(message);
                         Globals.setMoveDir(jsonMessage.move);
-                        Globals.updateReward(jsonMessage.reward);
-                        Debug.Log(jsonMessage.done);
                         if(jsonMessage.done){
                             Globals.done = jsonMessage.done;
                         }

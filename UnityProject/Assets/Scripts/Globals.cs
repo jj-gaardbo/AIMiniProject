@@ -28,10 +28,6 @@ public static class Globals{
         originalDistanceToGoal = distance;
     }
 
-    public static void setDone(){
-        done = true;
-    }
-
     public static float[] getRays(){
         return rays;
     }
@@ -42,7 +38,6 @@ public static class Globals{
 
     public static void goalReached(){
         hasReachedGoal = true;
-        setDone();
         Debug.Log("Goal reached " + hasReachedGoal);
     }
 
