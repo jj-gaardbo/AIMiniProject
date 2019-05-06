@@ -17,9 +17,7 @@ timeout = time
 
 state_size = 7
 action_size = 4
-agent = DQNAgent(state_size, action_size)
 batch_size = 32
-
 num_of_episodes = 1000
 epsilon_decrease_factor = 20
 
@@ -235,6 +233,7 @@ def reset_program(message):
     return globalMessage
 
 
+agent = DQNAgent(state_size, action_size)
 while True:
 
     #  Wait for next request from client
@@ -247,7 +246,7 @@ while True:
 
         # Learning goes on here
         # We make sure that the agent does not get stuck
-        for time in range(500):
+        for time in range(1000):
             if not globalMessage.done:
 
                 action = agent.act(state)
