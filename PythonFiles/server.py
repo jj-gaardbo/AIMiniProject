@@ -15,17 +15,13 @@ socket.bind("tcp://*:5555")
 globalMessage = None
 timeout = time
 
-def translate_action(action):
-    if action == 0:
-        return 'f'
-    elif action == 1:
-        return 'l'
-    elif action == 2:
-        return 'r'
-    elif action == 3:
-        return 'b'
-    else:
-        return 'f'
+state_size = 7
+action_size = 4
+agent = DQNAgent(state_size, action_size)
+batch_size = 32
+
+num_of_episodes = 1000
+epsilon_decrease_factor = 20
 
 
 class DQNAgent():
@@ -72,7 +68,7 @@ class DQNAgent():
             self.model.fit(state, target_f, epochs=1, verbose=0)
 
         # We have to decrease the epsilon each time to make the actions less and less random
-        if self.epsilon > self.epsilon_min and episode % 20 == 0:
+        if self.epsilon > self.epsilon_min and episode % epsilon_decrease_factor == 0:
             self.epsilon *= self.epsilon_decay
 
 
@@ -136,6 +132,19 @@ def handleRays(data):
     return reward
 
 
+def translate_action(action):
+    if action == 0:
+        return 'f'
+    elif action == 1:
+        return 'l'
+    elif action == 2:
+        return 'r'
+    elif action == 3:
+        return 'b'
+    else:
+        return 'f'
+
+
 def calculate_reward(message):
     reward = 0
 
@@ -173,10 +182,7 @@ def is_done(message):
 
 #(curriculum learning)
 
-state_size = 7
-action_size = 4
-agent = DQNAgent(state_size, action_size)
-batch_size = 32
+
 def get_next_state(distance, origDistance, rays):
     reward = 0
     if distance > origDistance:
@@ -235,11 +241,8 @@ while True:
     incoming = handleJsonResponse(socket.recv())
     globalMessage = incoming
 
-    state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5]]])
-
-    for iter in range(500):
+    for iter in range(num_of_episodes):
         state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5]]])
-
         state = np.reshape(state, [1, state_size])
 
         # Learning goes on here
@@ -258,8 +261,6 @@ while True:
 
                 # Give a penalty if agent is just still
                 reward = reward if not done else -10
-
-                print(reward)
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
