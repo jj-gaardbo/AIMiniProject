@@ -18,9 +18,9 @@ timeout = time
 state_size = 7
 action_size = 4
 batch_size = 32
-num_of_episodes = 1000
-epsilon_decrease_factor = 20
-
+num_of_episodes = 2000
+epsilon_decrease_factor = 10
+movement_factor = 0.1
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
@@ -66,8 +66,10 @@ class DQNAgent():
             self.model.fit(state, target_f, epochs=1, verbose=0)
 
         # We have to decrease the epsilon each time to make the actions less and less random
-        if self.epsilon > self.epsilon_min and episode % epsilon_decrease_factor == 0:
-            self.epsilon *= self.epsilon_decay
+        if self.epsilon > self.epsilon_min:
+            if episode % epsilon_decrease_factor == 0:
+                print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
+                self.epsilon *= self.epsilon_decay
 
 
 # JSON Message Class to send to Unity
@@ -112,13 +114,6 @@ def handleJsonResponse(data):
 
 def handleRays(data):
     reward = 0
-    leftfar = data.rays[0]
-    left = data.rays[1]
-    front = data.rays[2]
-    right = data.rays[3]
-    rightfar = data.rays[4]
-    back = data.rays[5]
-
     for ray in data.rays:
         if ray < 1:
             reward -= 10
@@ -183,19 +178,21 @@ def is_done(message):
 
 def get_next_state(distance, origDistance, rays):
     reward = 0
-    if distance > origDistance:
-        reward -= 1
+    if distance+movement_factor > origDistance:
+        reward -= 5
     else:
         reward += 1
 
     iterator = 0
     rayRewards = [0, 0, 0, 0, 0, 0]
     for ray in rays:
-        if ray < 1:
+        if ray-movement_factor < 1:
             rayRewards[iterator] -= 5
-        elif ray < 5:
+        elif ray-movement_factor < 3:
             rayRewards[iterator] -= abs(5-ray)
-        elif ray == 5:
+        elif ray-movement_factor > 3:
+            rayRewards[iterator] += 0.5
+        elif ray-movement_factor == 5-movement_factor:
             rayRewards[iterator] += 1
         iterator += 1
 
@@ -259,8 +256,9 @@ while True:
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
-                reward = reward if not done else -10
+                reward = reward if not done else -100
 
+                print(reward)
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
 
@@ -269,7 +267,7 @@ while True:
                 state = next_state
 
                 if done:
-                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
+                    print("Episode: " + str(iter) + " Reward: " + str(reward) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
                     globalMessage = reset_program(globalMessage)
                     break
 
