@@ -26,7 +26,7 @@ class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=10000)
         self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
@@ -112,19 +112,6 @@ def handleJsonResponse(data):
     return Message(dataReceived['move'], dataReceived['reward'], dataReceived['hasReachedGoal'], dataReceived['rays'], dataReceived['done'], dataReceived['distanceToGoal'], dataReceived['originalDistanceToGoal'])
 
 
-def handleRays(data):
-    reward = 0
-    for ray in data.rays:
-        if ray < 1:
-            reward -= 10
-        elif ray < 5:
-            reward -= abs(5-ray)
-        elif ray == 5:
-            reward += 1
-
-    return reward
-
-
 def translate_action(action):
     if action == 0:
         return 'f'
@@ -136,25 +123,6 @@ def translate_action(action):
         return 'b'
     else:
         return 'f'
-
-
-def calculate_reward(message):
-    reward = 0
-
-    if message.distanceToGoal > message.origDistanceToGoal:
-        reward -= abs(message.origDistanceToGoal-message.distanceToGoal)
-    elif message.distanceToGoal < message.origDistanceToGoal:
-        reward += abs(message.origDistanceToGoal-message.distanceToGoal)
-
-    if message.hasReachedGoal:
-        reward += 1000
-
-    rayReward = handleRays(message)
-
-    reward += rayReward
-
-    return reward
-
 
 def is_done(message):
     isDone = False
@@ -180,26 +148,74 @@ def is_done(message):
 
 #(curriculum learning)
 
+def ray_reward(data, movement, returnArray):
 
-def get_next_state(distance, origDistance, rays):
-    reward = 0
-    if distance+movement_factor > origDistance:
-        reward -= 5
+    if returnArray:
+        iterator = 0
+        rayRewards = [0, 0, 0, 0, 0, 0]
+        for ray in data.rays:
+            if ray < 5:
+                if ray - movement < 1:
+                    rayRewards[iterator] -= 5
+                elif ray - movement < 3:
+                    rayRewards[iterator] -= abs(5 - ray)
+                elif ray - movement > 3:
+                    rayRewards[iterator] += 0.5
+                elif ray - movement == 5 - movement:
+                    rayRewards[iterator] += 1
+            iterator += 1
+        return rayRewards
+
     else:
-        reward += 1
+        reward = 0
+        for ray in data.rays:
+            if ray-movement < 1:
+                reward -= 5
+            elif ray-movement < 5:
+                reward -= abs(5-ray)
+            elif ray-movement == 5:
+                reward += 1
 
-    iterator = 0
-    rayRewards = [0, 0, 0, 0, 0, 0]
-    for ray in rays:
-        if ray-movement_factor < 1:
-            rayRewards[iterator] -= 5
-        elif ray-movement_factor < 3:
-            rayRewards[iterator] -= abs(5-ray)
-        elif ray-movement_factor > 3:
-            rayRewards[iterator] += 0.5
-        elif ray-movement_factor == 5-movement_factor:
-            rayRewards[iterator] += 1
-        iterator += 1
+        return reward
+
+def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.189245223999023
+        reward = 0
+        distance = dist+movement
+
+        if distance < 5:
+            reward += 1
+        elif distance < 8:
+            reward += 0.02
+        elif distance < 10:
+            reward += 0.01
+        elif distance < origDist:
+            reward += 0.001
+        elif distance > origDist:
+            reward -= 5
+
+        if last_dist < dist:
+            reward -= 5
+
+        reward += origDist - dist
+        return reward
+
+
+def calculate_reward(message, old_dist):
+    reward = 0
+    reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, 0, old_dist)
+
+    if message.hasReachedGoal:
+        reward += 1000
+
+    rayReward = ray_reward(message, 0, False)
+    reward += rayReward
+    return reward
+1
+
+def get_next_state(distance, origDistance, message, last_dist):
+    reward = 0
+    reward += distance_reward(distance, origDistance, movement_factor, last_dist)
+    rayRewards = ray_reward(message, movement_factor, True)
 
     return np.array([[reward, rayRewards[0], rayRewards[1], rayRewards[2], rayRewards[3], rayRewards[4], rayRewards[5]]])
 
@@ -242,6 +258,7 @@ while True:
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
     globalMessage = incoming
+    print("Distance:" + str(globalMessage.origDistanceToGoal))
 
     for iter in range(num_of_episodes):
         state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5]]])
@@ -254,17 +271,20 @@ while True:
 
                 action = agent.act(state)
                 globalMessage.move = translate_action(action)
+
+                last_distance = globalMessage.distanceToGoal
                 globalMessage = update_message(globalMessage)
 
-                next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage.rays)
-                reward = calculate_reward(globalMessage)
+                next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance)
+                reward = calculate_reward(globalMessage, last_distance)
+
+                print(reward)
 
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
                 reward = reward if not done else -10
 
-                #print(reward)
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
 
