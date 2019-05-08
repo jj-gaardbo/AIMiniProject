@@ -11,28 +11,43 @@ from keras.optimizers import Adam
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
+timeoutamount = 0.08
 
 globalMessage = None
 timeout = time
 
-state_size = 9
-action_size = 4
+state_size = 18
+action_size = 8
 batch_size = 32
-num_of_episodes = 2000
+num_of_episodes = 5000
 epsilon_decrease_factor = 10
 movement_factor = 0.5
+
+punish_ray_1 = 10
+punish_ray_2 = 2
+punish_ray_3 = 0.1
+
+reward_distance_1 = 1
+reward_distance_2 = 0.5
+reward_distance_3 = 0.3
+reward_distance_4 = 0.1
+punish_distance_1 = 15
+punish_distance_larger = 20
+reward_distance_smaller = 2
+
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=10000)
+        self.memory = deque(maxlen=20000)
         self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.998
         self.learning_rate = 0.001
         self.model = self.model()
+        self.goal_count = 0
 
     def model(self):
         model = Sequential()
@@ -70,6 +85,9 @@ class DQNAgent():
             if episode % epsilon_decrease_factor == 0:
                 #print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
                 self.epsilon *= self.epsilon_decay
+
+    def increment_goal_count(self):
+        self.goal_count += 1
 
 
 # JSON Message Class to send to Unity
@@ -116,11 +134,19 @@ def translate_action(action):
     if action == 0:
         return 'f'
     elif action == 1:
-        return 'l'
-    elif action == 2:
-        return 'r'
-    elif action == 3:
         return 'b'
+    elif action == 2:
+        return 'l'
+    elif action == 3:
+        return 'r'
+    elif action == 4:
+        return 'fl'
+    elif action == 5:
+        return 'fr'
+    elif action == 6:
+        return 'bl'
+    elif action == 7:
+        return 'br'
     else:
         return 'f'
 
@@ -141,71 +167,68 @@ def is_done(message):
     return isDone
 
 
-#calculate state and next state. Look at openAI documentation
-
-#medium.com
-#https://towardsdatascience.com/
-
-#(curriculum learning)
-
 def ray_reward(data, movement, returnArray):
+    active_rays = 0
 
     if returnArray:
         iterator = 0
-        rayRewards = [0, 0, 0, 0, 0, 0, 0, 0]
+        rayRewards = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         for ray in data.rays:
             if ray < 5:
                 if ray - movement < 1:
-                    rayRewards[iterator] -= 20
-                elif ray - movement < 2:
-                    rayRewards[iterator] -= 15
+                    rayRewards[iterator] -= punish_ray_1*1.1
                 elif ray - movement < 3:
-                    rayRewards[iterator] -= 10
+                    active_rays += 1
+                    rayRewards[iterator] -= punish_ray_2*1.1
                 elif ray - movement > 3:
-                    rayRewards[iterator] -= 2
-                elif ray - movement == (5 - movement):
-                    rayRewards[iterator] += 1
+                    rayRewards[iterator] -= punish_ray_3*1.1
             iterator += 1
+
+        for reward in rayRewards:
+            reward -= active_rays
+
         return rayRewards
 
     else:
         reward = 0
         for ray in data.rays:
-            if ray-movement < 1:
-                reward -= 5
-            elif ray-movement < 5:
-                reward -= abs(5-ray)
-            elif ray-movement == 5:
-                reward += 0.1
-
+            if ray - movement < 1:
+                reward -= punish_ray_1
+            elif ray - movement < 3:
+                active_rays += 1
+                reward -= punish_ray_2
+            elif ray - movement > 3:
+                reward -= punish_ray_3
+            reward -= active_rays
         return reward
+
 
 def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.189245223999023
         reward = 0
         distance = dist+movement
 
         if distance < 5:
-            reward += 10
+            reward += reward_distance_1
         elif distance < 8:
-            reward += 5
+            reward += reward_distance_2
         elif distance < 10:
-            reward += 1
+            reward += reward_distance_3
         elif distance < origDist:
-            reward += 0.1
+            reward += reward_distance_4
         elif distance > origDist:
-            reward -= 10
+            reward -= punish_distance_1
 
-        if last_dist < dist:
-            reward -= 8
+        if last_dist+movement <= dist:
+            reward -= punish_distance_larger+(abs(dist-origDist)*(dist*0.5))
         else:
-            reward += 2
+            reward += reward_distance_smaller+(abs(dist-origDist)*1.5)
 
-        #reward += origDist - dist
         return reward
 
 
 def calculate_reward(message, old_dist):
     if message.hasReachedGoal:
+        agent.increment_goal_count()
         reward = 1000
         return reward
 
@@ -216,14 +239,31 @@ def calculate_reward(message, old_dist):
     reward += rayReward
 
     return reward
-1
+
 
 def get_next_state(distance, origDistance, message, last_dist):
     reward = 0
     reward += distance_reward(distance, origDistance, movement_factor, last_dist)
     rayRewards = ray_reward(message, movement_factor, True)
 
-    return np.array([[reward, rayRewards[0], rayRewards[1], rayRewards[2], rayRewards[3], rayRewards[4], rayRewards[5], rayRewards[6], rayRewards[7]]])
+    return np.array([[reward,
+                      rayRewards[0],
+                      rayRewards[1],
+                      rayRewards[2],
+                      rayRewards[3],
+                      rayRewards[4],
+                      rayRewards[5],
+                      rayRewards[6],
+                      rayRewards[7],
+                      rayRewards[8],
+                      rayRewards[9],
+                      rayRewards[10],
+                      rayRewards[11],
+                      rayRewards[12],
+                      rayRewards[13],
+                      rayRewards[14],
+                      rayRewards[15],
+                      rayRewards[16]]])
 
 
 def update_message(message):
@@ -240,7 +280,7 @@ def update_message(message):
     incoming = handleJsonResponse(socket.recv())
     if incoming.hasReachedGoal:
         print("GOOOOOOOOOOAAAAAAAAALLLLL!!!!!!!!")
-    timeout.sleep(0.2)
+    timeout.sleep(timeoutamount)
     return incoming
 
 
@@ -254,10 +294,10 @@ def reset_program(message):
                          message.origDistanceToGoal)
     socket.send_string(newMessage.to_string())
     globalMessage = handleJsonResponse(socket.recv())
+    timeout.sleep(timeoutamount)
     globalMessage.move = 'f'
     globalMessage.reward = 0
     globalMessage.hasReachedGoal = False
-    timeout.sleep(0.2)
     return globalMessage
 
 
@@ -270,12 +310,29 @@ while True:
     print("Distance:" + str(globalMessage.origDistanceToGoal))
 
     for iter in range(num_of_episodes):
-        state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5],  globalMessage.rays[6],  globalMessage.rays[7]]])
+        state = np.array([[globalMessage.distanceToGoal,
+                           globalMessage.rays[0],
+                           globalMessage.rays[1],
+                           globalMessage.rays[2],
+                           globalMessage.rays[3],
+                           globalMessage.rays[4],
+                           globalMessage.rays[5],
+                           globalMessage.rays[6],
+                           globalMessage.rays[7],
+                           globalMessage.rays[8],
+                           globalMessage.rays[9],
+                           globalMessage.rays[10],
+                           globalMessage.rays[11],
+                           globalMessage.rays[12],
+                           globalMessage.rays[13],
+                           globalMessage.rays[14],
+                           globalMessage.rays[15],
+                           globalMessage.rays[16]]])
         state = np.reshape(state, [1, state_size])
 
         # Learning goes on here
         # We make sure that the agent does not get stuck
-        for time in range(1000):
+        for time in range(100):
             if not globalMessage.done:
 
                 action = agent.act(state)
@@ -309,6 +366,8 @@ while True:
                 if len(agent.memory) > batch_size:
                     agent.train_replay(batch_size, iter)
 
-
-
-
+    reset_program(globalMessage)
+    print("Total goal count: " + str(agent.goal_count))
+    agent.model.save('robot_model.h5')
+    timeout.sleep(1)
+    socket.context.__exit__()
