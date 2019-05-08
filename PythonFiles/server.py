@@ -15,7 +15,7 @@ socket.bind("tcp://*:5555")
 globalMessage = None
 timeout = time
 
-state_size = 7
+state_size = 9
 action_size = 4
 batch_size = 32
 num_of_episodes = 2000
@@ -152,16 +152,18 @@ def ray_reward(data, movement, returnArray):
 
     if returnArray:
         iterator = 0
-        rayRewards = [0, 0, 0, 0, 0, 0]
+        rayRewards = [0, 0, 0, 0, 0, 0, 0, 0]
         for ray in data.rays:
             if ray < 5:
                 if ray - movement < 1:
-                    rayRewards[iterator] -= 5
+                    rayRewards[iterator] -= 20
+                elif ray - movement < 2:
+                    rayRewards[iterator] -= 15
                 elif ray - movement < 3:
-                    rayRewards[iterator] -= abs(5 - ray)
+                    rayRewards[iterator] -= 10
                 elif ray - movement > 3:
-                    rayRewards[iterator] += 0.5
-                elif ray - movement == 5 - movement:
+                    rayRewards[iterator] -= 2
+                elif ray - movement == (5 - movement):
                     rayRewards[iterator] += 1
             iterator += 1
         return rayRewards
@@ -174,7 +176,7 @@ def ray_reward(data, movement, returnArray):
             elif ray-movement < 5:
                 reward -= abs(5-ray)
             elif ray-movement == 5:
-                reward += 1
+                reward += 0.1
 
         return reward
 
@@ -183,32 +185,36 @@ def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.1892452
         distance = dist+movement
 
         if distance < 5:
-            reward += 1
+            reward += 10
         elif distance < 8:
-            reward += 0.02
+            reward += 5
         elif distance < 10:
-            reward += 0.01
+            reward += 1
         elif distance < origDist:
-            reward += 0.001
+            reward += 0.1
         elif distance > origDist:
-            reward -= 5
+            reward -= 10
 
         if last_dist < dist:
-            reward -= 5
+            reward -= 8
+        else:
+            reward += 2
 
-        reward += origDist - dist
+        #reward += origDist - dist
         return reward
 
 
 def calculate_reward(message, old_dist):
-    reward = 0
-    reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, 0, old_dist)
-
     if message.hasReachedGoal:
-        reward += 1000
+        reward = 1000
+        return reward
 
+    reward = 0
+
+    reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, 0, old_dist)
     rayReward = ray_reward(message, 0, False)
     reward += rayReward
+
     return reward
 1
 
@@ -217,7 +223,7 @@ def get_next_state(distance, origDistance, message, last_dist):
     reward += distance_reward(distance, origDistance, movement_factor, last_dist)
     rayRewards = ray_reward(message, movement_factor, True)
 
-    return np.array([[reward, rayRewards[0], rayRewards[1], rayRewards[2], rayRewards[3], rayRewards[4], rayRewards[5]]])
+    return np.array([[reward, rayRewards[0], rayRewards[1], rayRewards[2], rayRewards[3], rayRewards[4], rayRewards[5], rayRewards[6], rayRewards[7]]])
 
 
 def update_message(message):
@@ -232,14 +238,16 @@ def update_message(message):
                       message.origDistanceToGoal)
     socket.send_string(newMessage.to_string())
     incoming = handleJsonResponse(socket.recv())
-    timeout.sleep(0.1)
+    if incoming.hasReachedGoal:
+        print("GOOOOOOOOOOAAAAAAAAALLLLL!!!!!!!!")
+    timeout.sleep(0.2)
     return incoming
 
 
 def reset_program(message):
     newMessage = Message(message.move,
                          message.reward,
-                         False,
+                         message.hasReachedGoal,
                          message.rays,
                          True,
                          message.distanceToGoal,
@@ -248,7 +256,8 @@ def reset_program(message):
     globalMessage = handleJsonResponse(socket.recv())
     globalMessage.move = 'f'
     globalMessage.reward = 0
-    timeout.sleep(0.1)
+    globalMessage.hasReachedGoal = False
+    timeout.sleep(0.2)
     return globalMessage
 
 
@@ -261,7 +270,7 @@ while True:
     print("Distance:" + str(globalMessage.origDistanceToGoal))
 
     for iter in range(num_of_episodes):
-        state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5]]])
+        state = np.array([[globalMessage.distanceToGoal, globalMessage.rays[0], globalMessage.rays[1], globalMessage.rays[2], globalMessage.rays[3], globalMessage.rays[4], globalMessage.rays[5],  globalMessage.rays[6],  globalMessage.rays[7]]])
         state = np.reshape(state, [1, state_size])
 
         # Learning goes on here
@@ -293,7 +302,7 @@ while True:
                 state = next_state
 
                 if done:
-                    print("Episode: " + str(iter) + " Reward: " + str(reward) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
+                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
                     globalMessage = reset_program(globalMessage)
                     break
 

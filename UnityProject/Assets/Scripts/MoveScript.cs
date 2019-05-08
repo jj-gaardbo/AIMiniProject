@@ -40,12 +40,11 @@ public class MoveScript : MonoBehaviour
     {
 
         Move();
-        Globals.setRays(new float[] {CastRay(-2), CastRay(-1), CastRay(0), CastRay(1), CastRay(2), CastRay(3)});
+        Globals.setRays(new float[] {CastRay(-2), CastRay(-1), CastRay(0), CastRay(1), CastRay(2), CastRay(3), CastRay(4), CastRay(5)});
         
 
         if(HasReachedGoal()){
             Globals.goalReached();
-            resetProgram();
         }
 
         if(Globals.done){
@@ -148,6 +147,18 @@ public class MoveScript : MonoBehaviour
             case 3:
                 if (Physics.Raycast(transform.position, back.normalized, out hit, rayLength)) {
                     Debug.DrawRay(transform.position, transform.TransformDirection((back).normalized) * hit.distance, Color.red);
+                    length = hit.distance;
+                }
+            break;
+            case 4:
+                if (Physics.Raycast(transform.position, (right + back).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((right + back).normalized) * hit.distance, Color.red);
+                    length = hit.distance;
+                }
+            break;
+            case 5:
+                if (Physics.Raycast(transform.position, (left + back).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((left + back).normalized) * hit.distance, Color.red);
                     length = hit.distance;
                 }
             break;
