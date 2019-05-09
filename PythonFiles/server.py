@@ -11,28 +11,21 @@ from keras.optimizers import Adam
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.08
+timeoutamount = 0.07
 
 globalMessage = None
 timeout = time
 
-state_size = 18
+state_size = 17
 action_size = 8
 batch_size = 32
 num_of_episodes = 5000
-epsilon_decrease_factor = 10
-movement_factor = 0.5
+epsilon_decrease_factor = 20
+movement_factor = 1
 
-punish_ray_1 = 10
-punish_ray_2 = 2
-punish_ray_3 = 0.1
+ray_tolerance = 2
 
-reward_distance_1 = 1
-reward_distance_2 = 0.5
-reward_distance_3 = 0.3
-reward_distance_4 = 0.1
-punish_distance_1 = 15
-punish_distance_larger = 20
+punish_distance_larger = 10
 reward_distance_smaller = 2
 
 
@@ -171,18 +164,10 @@ def ray_reward(data, movement, returnArray):
     active_rays = 0
 
     if returnArray:
-        iterator = 0
-        rayRewards = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        rayRewards = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         for ray in data.rays:
-            if ray < 5:
-                if ray - movement < 1:
-                    rayRewards[iterator] -= punish_ray_1*1.1
-                elif ray - movement < 3:
-                    active_rays += 1
-                    rayRewards[iterator] -= punish_ray_2*1.1
-                elif ray - movement > 3:
-                    rayRewards[iterator] -= punish_ray_3*1.1
-            iterator += 1
+            if ray - movement < ray_tolerance:
+                active_rays *= 1
 
         for reward in rayRewards:
             reward -= active_rays
@@ -192,37 +177,18 @@ def ray_reward(data, movement, returnArray):
     else:
         reward = 0
         for ray in data.rays:
-            if ray - movement < 1:
-                reward -= punish_ray_1
-            elif ray - movement < 3:
+            if ray < ray_tolerance:
                 active_rays += 1
-                reward -= punish_ray_2
-            elif ray - movement > 3:
-                reward -= punish_ray_3
-            reward -= active_rays
+            reward *= active_rays
         return reward
 
 
 def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.189245223999023
         reward = 0
-        distance = dist+movement
-
-        if distance < 5:
-            reward += reward_distance_1
-        elif distance < 8:
-            reward += reward_distance_2
-        elif distance < 10:
-            reward += reward_distance_3
-        elif distance < origDist:
-            reward += reward_distance_4
-        elif distance > origDist:
-            reward -= punish_distance_1
-
         if last_dist+movement <= dist:
-            reward -= punish_distance_larger+(abs(dist-origDist)*(dist*0.5))
-        else:
-            reward += reward_distance_smaller+(abs(dist-origDist)*1.5)
-
+            reward -= punish_distance_larger+(abs(dist-origDist)+dist*1.1)
+        elif last_dist+movement > dist:
+            reward += reward_distance_smaller+(abs(dist-origDist)-dist)*0.1
         return reward
 
 
@@ -262,8 +228,7 @@ def get_next_state(distance, origDistance, message, last_dist):
                       rayRewards[12],
                       rayRewards[13],
                       rayRewards[14],
-                      rayRewards[15],
-                      rayRewards[16]]])
+                      rayRewards[15]]])
 
 
 def update_message(message):
@@ -307,7 +272,6 @@ while True:
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
     globalMessage = incoming
-    print("Distance:" + str(globalMessage.origDistanceToGoal))
 
     for iter in range(num_of_episodes):
         state = np.array([[globalMessage.distanceToGoal,
@@ -326,8 +290,7 @@ while True:
                            globalMessage.rays[12],
                            globalMessage.rays[13],
                            globalMessage.rays[14],
-                           globalMessage.rays[15],
-                           globalMessage.rays[16]]])
+                           globalMessage.rays[15]]])
         state = np.reshape(state, [1, state_size])
 
         # Learning goes on here
@@ -359,7 +322,7 @@ while True:
                 state = next_state
 
                 if done:
-                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
+                    #print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
                     globalMessage = reset_program(globalMessage)
                     break
 
