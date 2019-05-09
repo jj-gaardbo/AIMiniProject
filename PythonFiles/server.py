@@ -19,12 +19,12 @@ timeout = time
 state_size = 17
 action_size = 8
 batch_size = 64
-num_of_episodes = 5000
+num_of_episodes = 10000
 epsilon_decrease_factor = 20
 movement_factor = 0.7
 
 ray_high_tolerance = 2
-ray_low_tolerance = 0.9
+ray_low_tolerance = 1.2
 
 punish_distance_larger = 5
 reward_distance_smaller = 10
@@ -173,10 +173,13 @@ def ray_reward(data, movement, returnArray):
                 rayRewards[iterator] -= 10
 
             elif ray-movement <= ray_high_tolerance:
+                rayRewards[iterator] -= 5
+
+            elif (ray-movement > ray_high_tolerance) and (ray - movement < 5):
                 rayRewards[iterator] -= 1
 
-            elif ray-movement > ray_high_tolerance:
-                rayRewards[iterator] += 0.1
+            elif ray-movement < 5:
+                rayRewards[iterator] -= 0.1
 
         for reward in rayRewards:
             reward -= active_rays
@@ -190,9 +193,11 @@ def ray_reward(data, movement, returnArray):
                 active_rays += 1
                 reward -= 10
             elif ray <= ray_high_tolerance:
-                reward -=1
-            elif ray > ray_high_tolerance:
-                reward += 0.1
+                reward -=5
+            elif ray_high_tolerance < ray < 5:
+                reward -= 1
+            elif ray < 5:
+                reward -= 0.1
 
             reward -= active_rays
         return reward
@@ -201,9 +206,9 @@ def ray_reward(data, movement, returnArray):
 def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.189245223999023
         reward = 0
         if last_dist+movement <= dist:
-            reward -= punish_distance_larger+(abs(dist-origDist)+dist*1.1)
+            reward -= punish_distance_larger*(abs(dist-origDist)*1.1)
         elif last_dist+movement > dist:
-            reward += reward_distance_smaller+(abs(dist-origDist)-dist)
+            reward += reward_distance_smaller*(abs(dist-origDist)*0.5)
         return reward
 
 
@@ -344,6 +349,10 @@ while True:
 
     reset_program(globalMessage)
     print("Total goal count: " + str(agent.goal_count))
+    if agent.epsilon <= agent.epsilon_min and agent.goal_count > 50:
+        print("This agent has figured it out!")
+        agent.model.save('robot_model_over 10_goals.h5')
+        timeout.sleep(1)
     agent.model.save('robot_model.h5')
     timeout.sleep(1)
     socket.context.__exit__()
