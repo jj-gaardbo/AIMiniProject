@@ -18,22 +18,23 @@ timeout = time
 
 state_size = 17
 action_size = 8
-batch_size = 32
+batch_size = 64
 num_of_episodes = 5000
 epsilon_decrease_factor = 20
-movement_factor = 1
+movement_factor = 0.7
 
-ray_tolerance = 2
+ray_high_tolerance = 2
+ray_low_tolerance = 0.9
 
-punish_distance_larger = 10
-reward_distance_smaller = 2
+punish_distance_larger = 5
+reward_distance_smaller = 10
 
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=20000)
+        self.memory = deque(maxlen=50000)
         self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
@@ -76,7 +77,7 @@ class DQNAgent():
         # We have to decrease the epsilon each time to make the actions less and less random
         if self.epsilon > self.epsilon_min:
             if episode % epsilon_decrease_factor == 0:
-                #print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
+                print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
                 self.epsilon *= self.epsilon_decay
 
     def increment_goal_count(self):
@@ -165,9 +166,17 @@ def ray_reward(data, movement, returnArray):
 
     if returnArray:
         rayRewards = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        iterator = 0
         for ray in data.rays:
-            if ray - movement < ray_tolerance:
-                active_rays *= 1
+            if ray-movement <= ray_low_tolerance:
+                active_rays += 1
+                rayRewards[iterator] -= 10
+
+            elif ray-movement <= ray_high_tolerance:
+                rayRewards[iterator] -= 1
+
+            elif ray-movement > ray_high_tolerance:
+                rayRewards[iterator] += 0.1
 
         for reward in rayRewards:
             reward -= active_rays
@@ -177,9 +186,15 @@ def ray_reward(data, movement, returnArray):
     else:
         reward = 0
         for ray in data.rays:
-            if ray < ray_tolerance:
+            if ray <= ray_low_tolerance:
                 active_rays += 1
-            reward *= active_rays
+                reward -= 10
+            elif ray <= ray_high_tolerance:
+                reward -=1
+            elif ray > ray_high_tolerance:
+                reward += 0.1
+
+            reward -= active_rays
         return reward
 
 
@@ -188,17 +203,15 @@ def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.1892452
         if last_dist+movement <= dist:
             reward -= punish_distance_larger+(abs(dist-origDist)+dist*1.1)
         elif last_dist+movement > dist:
-            reward += reward_distance_smaller+(abs(dist-origDist)-dist)*0.1
+            reward += reward_distance_smaller+(abs(dist-origDist)-dist)
         return reward
 
 
 def calculate_reward(message, old_dist):
+    reward = 0
     if message.hasReachedGoal:
         agent.increment_goal_count()
-        reward = 1000
-        return reward
-
-    reward = 0
+        reward += 1000
 
     reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, 0, old_dist)
     rayReward = ray_reward(message, 0, False)
@@ -312,7 +325,7 @@ while True:
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
-                reward = reward if not done else -10
+                reward = reward if not done else -100
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
@@ -322,7 +335,7 @@ while True:
                 state = next_state
 
                 if done:
-                    #print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon))
+                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count))
                     globalMessage = reset_program(globalMessage)
                     break
 
