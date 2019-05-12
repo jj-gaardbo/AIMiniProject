@@ -36,12 +36,6 @@ public class MoveScript : MonoBehaviour
     {
 
         walls = GameObject.FindGameObjectsWithTag("AllWalls");
-        /*wall1 = GameObject.FindGameObjectsWithTag("AllWalls")[0];
-        wall2 = GameObject.FindGameObjectsWithTag("AllWalls")[1];
-        wall3 = GameObject.FindGameObjectsWithTag("AllWalls")[2];
-        wall4 = GameObject.FindGameObjectsWithTag("AllWalls")[3];
-        wall5 = GameObject.FindGameObjectWithTag("AllWalls")[4];
-        wall6 = GameObject.FindGameObjectWithTag("AllWalls")[5]; */
 
         foreach (var wall in walls)
         {
@@ -173,7 +167,7 @@ public class MoveScript : MonoBehaviour
 
     bool HasReachedGoal()
     {
-        float minDistance = 2f;
+        float minDistance = 3f;
         GameObject goal = GameObject.FindGameObjectWithTag("Finish");
 
         float distanceToGoal = Vector3.Distance(gameObject.transform.position, goal.transform.position);

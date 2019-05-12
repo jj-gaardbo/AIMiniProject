@@ -13,7 +13,7 @@ from sklearn.preprocessing import normalize, minmax_scale
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.06
+timeoutamount = 0.03
 
 globalMessage = None
 timeout = time
@@ -22,10 +22,10 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 1
+epsilon_decrease_factor = 20
 movement_factor = 0.5
 
-ray_high_tolerance = 4
+ray_high_tolerance = 5
 ray_low_tolerance = 2
 
 punish_distance_larger = 500
@@ -78,8 +78,8 @@ class DQNAgent():
 
         # We have to decrease the epsilon each time to make the actions less and less random
         if self.epsilon > self.epsilon_min:
-            if episode % epsilon_decrease_factor == 0:
-                #print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
+            if episode % epsilon_decrease_factor == 0 and not episode == 0:
+                print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
                 self.epsilon *= self.epsilon_decay
 
     def increment_goal_count(self):
@@ -169,39 +169,26 @@ def ray_reward(data, movement, returnArray):
     active_rays = 0
 
     if returnArray:
-        rayRewards = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        return rayRewards
+        rayRewards = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         iterator = 0
         for ray in data.rays:
-            if ray-movement <= 0.8:
-                ray -= 10
-            elif ray-movement <= ray_low_tolerance:
+            if ray-movement < ray_high_tolerance:
                 active_rays += 1
-                ray -= 3
-            elif ray-movement <= ray_high_tolerance:
-                ray -= abs(5-ray)
+                ray -= abs(ray_high_tolerance-ray)
+
             rayRewards[iterator] = ray
             iterator += 1
-
-        for reward in rayRewards:
-            reward -= active_rays*0.5
 
         rayRewards = minmax_scale(np.array(rayRewards))
         return rayRewards
 
     else:
-        reward = 0
-        return 0
-        for ray in data.rays:
-            if ray <= 1.2:
-                reward -= 10
-            elif ray <= ray_low_tolerance:
-                active_rays += 1
-                ray -= 3
-            elif ray <= ray_high_tolerance:
-                reward -= abs(5-ray)
+        reward = 1
 
-            reward -= active_rays*0.5
+        for ray in data.rays:
+            if ray < ray_high_tolerance:
+                active_rays += 1
+                reward -= abs(ray_high_tolerance-ray)
 
         return reward
 
@@ -211,7 +198,10 @@ def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.1892452
         reward = 1
 
         if last_dist+movement < dist:
-            reward -= 2
+            reward -= 3
+
+        if dist < 10:
+            reward += abs(origDist-dist)
 
         return reward
 
