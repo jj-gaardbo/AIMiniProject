@@ -22,10 +22,10 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 20
+epsilon_decrease_factor = 50
 movement_factor = 0.5
 
-ray_high_tolerance = 5
+ray_high_tolerance = 4.5
 ray_low_tolerance = 2
 
 punish_distance_larger = 500
@@ -198,10 +198,12 @@ def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.1892452
         reward = 1
 
         if last_dist+movement < dist:
-            reward -= 3
+            reward -= 10
 
         if dist < 10:
-            reward += abs(origDist-dist)
+            reward += abs(origDist-dist)*0.5
+        elif dist < 15:
+            reward += abs(origDist - dist) * 0.1
 
         return reward
 
