@@ -41,6 +41,11 @@ public class HelloRequester : RunAbleThread
                         if(jsonMessage.done){
                             Globals.done = jsonMessage.done;
                         }
+
+                        if(jsonMessage.addWall == true){
+                            Debug.Log("Add a fucking wall");
+                            Globals.addANewWall();
+                        }
                     }
                 }       
             }

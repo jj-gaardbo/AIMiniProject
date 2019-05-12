@@ -18,7 +18,7 @@ public class HelloClient : MonoBehaviour
 
         if (SendPack)
         {
-            Message send = new Message(Globals.moveDir, Globals.reward, Globals.hasReachedGoal, Globals.rays, Globals.done, Globals.distanceToGoal, Globals.originalDistanceToGoal);
+            Message send = new Message(Globals.moveDir, Globals.reward, Globals.hasReachedGoal, Globals.rays, Globals.done, Globals.distanceToGoal, Globals.originalDistanceToGoal, false);
 
             byte[] array = Encoding.ASCII.GetBytes(JsonUtility.ToJson(send));
             _helloRequester.bytes = array;

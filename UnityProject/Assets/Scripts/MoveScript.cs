@@ -4,7 +4,13 @@ using UnityEngine;
 
 public class MoveScript : MonoBehaviour
 {
-    
+    public static GameObject wall1;
+    public static GameObject wall2;
+    public static GameObject wall3;
+    public static GameObject wall4;
+    public static GameObject wall5;
+    public static GameObject wall6;
+
     List<RaycastHit> rayHits;
 
     Rigidbody rb;
@@ -22,9 +28,26 @@ public class MoveScript : MonoBehaviour
 
     private Vector3 moveDirection = Vector3.zero;
 
+    public GameObject[] walls;
+
+
     // Start is called before the first frame update
     void Start()
     {
+
+        walls = GameObject.FindGameObjectsWithTag("AllWalls");
+        /*wall1 = GameObject.FindGameObjectsWithTag("AllWalls")[0];
+        wall2 = GameObject.FindGameObjectsWithTag("AllWalls")[1];
+        wall3 = GameObject.FindGameObjectsWithTag("AllWalls")[2];
+        wall4 = GameObject.FindGameObjectsWithTag("AllWalls")[3];
+        wall5 = GameObject.FindGameObjectWithTag("AllWalls")[4];
+        wall6 = GameObject.FindGameObjectWithTag("AllWalls")[5]; */
+
+        foreach (var wall in walls)
+        {
+            wall.SetActive(false);
+        }
+        
         initialTransform = transform;
         initialPosition = transform.position;
         initialRotation = transform.rotation;
@@ -67,6 +90,38 @@ public class MoveScript : MonoBehaviour
         if(Globals.done){
             resetProgram();
         }
+
+        activateWall();
+    }
+
+    public void activateWall(){
+        switch (Globals.numWalls)
+        {
+            case 1:
+                if(!walls[0].activeInHierarchy)
+                    walls[0].SetActive(true);
+            break;
+            case 2:
+                if(!walls[1].activeInHierarchy)
+                    walls[1].SetActive(true);
+            break;
+            case 3:
+                if(!walls[2].activeInHierarchy)
+                    walls[2].SetActive(true);
+            break;
+            case 4:
+                if(!walls[3].activeInHierarchy)
+                    walls[3].SetActive(true);
+            break;
+            case 5:
+                if(!walls[4].activeInHierarchy)
+                    walls[4].SetActive(true);
+            break;
+            case 6:
+                if(!walls[5].activeInHierarchy)
+                    walls[5].SetActive(true);
+            break;
+        }        
     }
 
     public static void resetProgram(){
@@ -79,7 +134,7 @@ public class MoveScript : MonoBehaviour
     public void Move(){
         string direction = Globals.moveDir;
         if(direction == null){
-            direction = "f";
+            return;
         }
         GameObject player = gameObject;
         
@@ -150,20 +205,20 @@ public class MoveScript : MonoBehaviour
                 }
             break;
             case 1:
+                if (Physics.Raycast(transform.position, back.normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((back).normalized) * hit.distance, Color.green);
+                    length = hit.distance;
+                }
+            break;
+            case 2:
             if (Physics.Raycast(transform.position, left, out hit, rayLength)) {
                 Debug.DrawRay(transform.position, transform.TransformDirection(left) * hit.distance, Color.green);
                 length = hit.distance;
             }
             break;
-            case 2:
+            case 3:
                 if (Physics.Raycast(transform.position, right, out hit, rayLength)) {
                     Debug.DrawRay(transform.position, transform.TransformDirection(right) * hit.distance, Color.green);
-                    length = hit.distance;
-                }
-            break;
-            case 3:
-                if (Physics.Raycast(transform.position, (right + fwd).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection((right + fwd).normalized) * hit.distance, Color.red);
                     length = hit.distance;
                 }
             break;
@@ -174,44 +229,44 @@ public class MoveScript : MonoBehaviour
                 }
             break;
             case 5:
-                if (Physics.Raycast(transform.position, back.normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection((back).normalized) * hit.distance, Color.green);
-                    length = hit.distance;
-                }
-            break;
-            case 6:
-                if (Physics.Raycast(transform.position, (right + back).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection((right + back).normalized) * hit.distance, Color.red);
-                    length = hit.distance;
-                }
-            break;
-            case 7:
-                if (Physics.Raycast(transform.position, (left + back).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection((left + back).normalized) * hit.distance, Color.red);
-                    length = hit.distance;
-                }
-            break;
-            case 8:
-                if (Physics.Raycast(transform.position, ((left+back) + left).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection(((left+back) + left).normalized) * hit.distance, Color.blue);
-                    length = hit.distance;
-                }
-            break;
-            case 9:
-                if (Physics.Raycast(transform.position, ((right+back) + right).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection(((right+back) + right).normalized) * hit.distance, Color.blue);
-                    length = hit.distance;
-                }
-            break;
-            case 10:
                 if (Physics.Raycast(transform.position, ((left+fwd) + fwd).normalized, out hit, rayLength)) {
                     Debug.DrawRay(transform.position, transform.TransformDirection(((left+fwd) + fwd).normalized) * hit.distance, Color.blue);
                     length = hit.distance;
                 }
             break;
-            case 11:
+            case 6:
+                if (Physics.Raycast(transform.position, ((fwd+left) + left).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection( ( (fwd+left) + left).normalized ) * hit.distance, Color.blue);
+                    length = hit.distance;
+                }
+            break;
+            case 7:
+                if (Physics.Raycast(transform.position, (right + fwd).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((right + fwd).normalized) * hit.distance, Color.red);
+                    length = hit.distance;
+                }
+            break;
+            case 8:
                 if (Physics.Raycast(transform.position, ((right+fwd) + fwd).normalized, out hit, rayLength)) {
                     Debug.DrawRay(transform.position, transform.TransformDirection(((right+fwd) + fwd).normalized) * hit.distance, Color.blue);
+                    length = hit.distance;
+                }
+            break;
+            case 9:
+                if (Physics.Raycast(transform.position, ((fwd+right) + right).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection( ( (fwd+right) + right).normalized ) * hit.distance, Color.blue);
+                    length = hit.distance;
+                }
+            break;
+            case 10:
+                if (Physics.Raycast(transform.position, (left + back).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((left + back).normalized) * hit.distance, Color.red);
+                    length = hit.distance;
+                }
+            break;
+            case 11:
+                if (Physics.Raycast(transform.position, ((left+back) + left).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection(((left+back) + left).normalized) * hit.distance, Color.blue);
                     length = hit.distance;
                 }
             break;
@@ -222,20 +277,20 @@ public class MoveScript : MonoBehaviour
                 }
             break;
             case 13:
-                if (Physics.Raycast(transform.position, ((right+back) + back).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection( ( (right+back) + back).normalized ) * hit.distance, Color.blue);
+                if (Physics.Raycast(transform.position, (right + back).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection((right + back).normalized) * hit.distance, Color.red);
                     length = hit.distance;
                 }
             break;
             case 14:
-                if (Physics.Raycast(transform.position, ((fwd+left) + left).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection( ( (fwd+left) + left).normalized ) * hit.distance, Color.blue);
+                if (Physics.Raycast(transform.position, ((right+back) + right).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection(((right+back) + right).normalized) * hit.distance, Color.blue);
                     length = hit.distance;
                 }
             break;
             case 15:
-                if (Physics.Raycast(transform.position, ((fwd+right) + right).normalized, out hit, rayLength)) {
-                    Debug.DrawRay(transform.position, transform.TransformDirection( ( (fwd+right) + right).normalized ) * hit.distance, Color.blue);
+                if (Physics.Raycast(transform.position, ((right+back) + back).normalized, out hit, rayLength)) {
+                    Debug.DrawRay(transform.position, transform.TransformDirection( ( (right+back) + back).normalized ) * hit.distance, Color.blue);
                     length = hit.distance;
                 }
             break;

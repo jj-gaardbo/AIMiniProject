@@ -8,6 +8,7 @@ public static class Globals{
     public static Transform playerInitialTransform;
     public static Vector3 playerInitialPosition;
     public static Quaternion playerInitialRotation;
+    public static int numWalls = 0;
 
     public static float reward = 1.0f;
     public static bool hasReachedGoal = false;
@@ -15,6 +16,10 @@ public static class Globals{
     public static bool done;
     public static float distanceToGoal;
     public static float originalDistanceToGoal;
+
+    public static void addANewWall(){
+        numWalls++;
+    }
 
     public static void updateReward(float rew){
         reward = rew;

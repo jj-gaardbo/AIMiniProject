@@ -10,8 +10,9 @@ public class Message{
     public bool done;
     public float distanceToGoal;
     public float originalDistanceToGoal;
+    public bool addWall;
 
-    public Message(string m, float r, bool g, float[] rayArray, bool d, float distance, float origDistance){
+    public Message(string m, float r, bool g, float[] rayArray, bool d, float distance, float origDistance, bool addNewWall){
         move = m;
         reward = r;
         hasReachedGoal = g;
@@ -19,6 +20,7 @@ public class Message{
         done = d;
         distanceToGoal = distance;
         originalDistanceToGoal = origDistance;
+        addWall = addNewWall;
     }
 }
 
