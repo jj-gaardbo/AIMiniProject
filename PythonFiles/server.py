@@ -22,7 +22,7 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 50
+epsilon_decrease_factor = 100
 movement_factor = 0.5
 
 ray_high_tolerance = 4.5
