@@ -5,7 +5,7 @@ import json
 import numpy as np
 from collections import deque
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, LeakyReLU, Softmax
 from keras.optimizers import Adam
 from sklearn.preprocessing import normalize, minmax_scale
 
@@ -13,7 +13,7 @@ from sklearn.preprocessing import normalize, minmax_scale
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.03
+timeoutamount = 0.05
 
 globalMessage = None
 timeout = time
@@ -22,14 +22,13 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 100
+epsilon_decrease_factor = 2
 movement_factor = 0.5
 
 ray_high_tolerance = 4.5
 ray_low_tolerance = 2
 
-punish_distance_larger = 500
-reward_distance_smaller = 100
+punish_distance_larger = 20
 
 
 class DQNAgent():
@@ -47,9 +46,14 @@ class DQNAgent():
 
     def model(self):
         model = Sequential()
-        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
-        model.add(Dense(24, activation='relu'))
+        #model.add(Dense(24, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(24, input_dim=self.state_size))
+        model.add(LeakyReLU())
+        #model.add(Dense(24, activation='relu'))
+        model.add(Dense(24))
+        model.add(LeakyReLU())
         model.add(Dense(self.action_size))
+        #model.add(Softmax())
         model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
         return model
 
@@ -172,11 +176,13 @@ def ray_reward(data, movement, returnArray):
         rayRewards = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         iterator = 0
         for ray in data.rays:
-            if ray-movement < ray_high_tolerance:
+            _reward = 0.0
+            if ray < ray_high_tolerance:
                 active_rays += 1
-                ray -= abs(ray_high_tolerance-ray)
+                ray = abs(ray_high_tolerance-ray)
+                _reward = _reward-ray
 
-            rayRewards[iterator] = ray
+            rayRewards[iterator] = _reward
             iterator += 1
 
         rayRewards = minmax_scale(np.array(rayRewards))
@@ -188,17 +194,19 @@ def ray_reward(data, movement, returnArray):
         for ray in data.rays:
             if ray < ray_high_tolerance:
                 active_rays += 1
-                reward -= abs(ray_high_tolerance-ray)
+                reward -= 1-abs(ray_high_tolerance-ray)
 
         return reward
 
 
 
 def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.189245223999023
-        reward = 1
+        reward = 0
 
-        if last_dist+movement < dist:
-            reward -= 10
+        if last_dist < dist:
+            reward -= punish_distance_larger
+        else:
+            reward += punish_distance_larger
 
         if dist < 10:
             reward += abs(origDist-dist)*0.5
@@ -323,7 +331,12 @@ while True:
                 next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance)
                 reward = calculate_reward(globalMessage, last_distance)
 
-                print(reward)
+                print("Ray1: {}".format(next_state[0][1]))
+                print("Ray2: {}".format(next_state[0][4]))
+                print("Ray3: {}".format(next_state[0][7]))
+                print("Ray4: {}".format(next_state[0][10]))
+                print("Ray5: {}".format(next_state[0][15]))
+                #print(reward)
 
                 done = is_done(globalMessage)
 
