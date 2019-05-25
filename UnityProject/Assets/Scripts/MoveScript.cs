@@ -30,6 +30,8 @@ public class MoveScript : MonoBehaviour
 
     public GameObject[] walls;
 
+    public bool incrementWalls = true;
+
 
     // Start is called before the first frame update
     void Start()
@@ -37,9 +39,10 @@ public class MoveScript : MonoBehaviour
 
         walls = GameObject.FindGameObjectsWithTag("AllWalls");
 
-        foreach (var wall in walls)
-        {
-            wall.SetActive(false);
+        if(incrementWalls){
+            foreach (var wall in walls){
+                wall.SetActive(false);
+            }
         }
         
         initialTransform = transform;

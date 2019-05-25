@@ -4,7 +4,7 @@ import zmq
 import json
 import numpy as np
 from collections import deque
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import Dense, LeakyReLU, Softmax
 from keras.optimizers import Adam
 from sklearn.preprocessing import normalize, minmax_scale
@@ -22,13 +22,12 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 2
-movement_factor = 0.5
+epsilon_decrease_factor = 10
 
-ray_high_tolerance = 4.5
-ray_low_tolerance = 2
+ray_high_tolerance = 2.5
 
-punish_distance_larger = 20
+distanceReward = True
+rayReward = True
 
 
 class DQNAgent():
@@ -169,50 +168,62 @@ def is_done(message):
     return isDone
 
 
-def ray_reward(data, movement, returnArray):
+def ray_reward(data, returnArray):
     active_rays = 0
 
     if returnArray:
-        rayRewards = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        rayRewards = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         iterator = 0
         for ray in data.rays:
             _reward = 0.0
-            if ray < ray_high_tolerance:
+            if ray <= ray_high_tolerance:
                 active_rays += 1
-                ray = abs(ray_high_tolerance-ray)
-                _reward = _reward-ray
+                _reward -= abs(ray-ray_high_tolerance)
+
+            else:
+                _reward += 0.01
 
             rayRewards[iterator] = _reward
             iterator += 1
 
-        rayRewards = minmax_scale(np.array(rayRewards))
+        #if active_rays == 0:
+        #    _iterator = 0
+        #    for _rayReward in rayRewards:
+        #        rayRewards[_iterator] = 1.0
+        #        _iterator += 1
+        #else:
+        #    _iterator = 0
+        #    for _rayReward in rayRewards:
+        #        rayRewards[_iterator] = 0.0-active_rays
+        #        _iterator += 1
+
         return rayRewards
 
     else:
-        reward = 1
+        reward = 0
 
         for ray in data.rays:
-            if ray < ray_high_tolerance:
+            if ray <= ray_high_tolerance:
                 active_rays += 1
-                reward -= 1-abs(ray_high_tolerance-ray)
+                reward -= abs(ray-ray_high_tolerance)
+            else:
+                reward += 0.01
+
+       # if active_rays == 0:
+       #     reward = 1.0
+       # else:
+       #     reward -= 0-active_rays
 
         return reward
 
 
 
-def distance_reward(dist, origDist, movement, last_dist): # origDist: 17.189245223999023
+def distance_reward(dist, origDist, last_dist): # origDist: 17.189245223999023
         reward = 0
-
         if last_dist < dist:
-            reward -= punish_distance_larger
+            reward -= abs(origDist - dist) * abs(dist*-1)
         else:
-            reward += punish_distance_larger
-
-        if dist < 10:
-            reward += abs(origDist-dist)*0.5
-        elif dist < 15:
-            reward += abs(origDist - dist) * 0.1
-
+            reward += abs(origDist - dist) * (abs(dist*-1)*0.001)
         return reward
 
 
@@ -220,18 +231,26 @@ def calculate_reward(message, old_dist):
     reward = 0
     if message.hasReachedGoal:
         agent.increment_goal_count()
-        reward += 1000
+        reward += 100
 
-    reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, 0, old_dist)
-    rayReward = ray_reward(message, 0, False)
-    reward += rayReward
+    if distanceReward:
+        reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, old_dist)
+
+    if rayReward:
+        reward += ray_reward(message, False)
+
     return reward
 
 
 def get_next_state(distance, origDistance, message, last_dist):
     reward = 0
-    reward += distance_reward(distance, origDistance, movement_factor, last_dist)
-    rayRewards = ray_reward(message, movement_factor, True)
+    if distanceReward:
+        reward += distance_reward(distance, origDistance, last_dist)
+
+    if rayReward:
+        rayRewards = ray_reward(message, True)
+    else:
+        rayRewards = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     return np.array([[reward,
                       rayRewards[0],
@@ -289,7 +308,32 @@ def reset_program(message):
     return globalMessage
 
 
+def print_rays(rays):
+    print("Ray1: {}".format(rays[1]))
+    print("Ray2: {}".format(rays[2]))
+    print("Ray3: {}".format(rays[3]))
+    print("Ray4: {}".format(rays[4]))
+    print("Ray5: {}".format(rays[5]))
+    print("Ray6: {}".format(rays[6]))
+    print("Ray7: {}".format(rays[7]))
+    print("Ray8: {}".format(rays[8]))
+    print("Ray9: {}".format(rays[9]))
+    print("Ray10: {}".format(rays[10]))
+    print("Ray11: {}".format(rays[11]))
+    print("Ray12: {}".format(rays[12]))
+    print("Ray13: {}".format(rays[13]))
+    print("Ray14: {}".format(rays[14]))
+    print("Ray15: {}".format(rays[15]))
+    print("Ray16: {}".format(rays[16]))
+
+def load_old_model(agent):
+    model = load_model("robot_model_over 10_goals.h5")
+    agent.model = model
+    agent.epsilon = agent.epsilon_min
+
+
 agent = DQNAgent(state_size, action_size)
+#load_old_model(agent)
 while True:
 
     #  Wait for next request from client
@@ -331,17 +375,14 @@ while True:
                 next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance)
                 reward = calculate_reward(globalMessage, last_distance)
 
-                print("Ray1: {}".format(next_state[0][1]))
-                print("Ray2: {}".format(next_state[0][4]))
-                print("Ray3: {}".format(next_state[0][7]))
-                print("Ray4: {}".format(next_state[0][10]))
-                print("Ray5: {}".format(next_state[0][15]))
-                #print(reward)
+                #print_rays(next_state[0])
+
+                print(reward)
 
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
-                reward = reward if not done else -10
+                reward = reward if not done else -100
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
@@ -352,7 +393,7 @@ while True:
 
                 if done:
                     print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count))
-                    if agent.goal_count % 10 == 0 and not previous_goal_count == agent.goal_count:
+                    if agent.goal_count % 3 == 0 and not previous_goal_count == agent.goal_count:
                         globalMessage.addWall = True
                     globalMessage = reset_program(globalMessage)
                     break

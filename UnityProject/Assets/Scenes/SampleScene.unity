@@ -447,7 +447,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rayLength: 5
-  speed: 2
+  speed: 3
   gravity: 1
   walls: []
 --- !u!136 &401799483
