@@ -13,7 +13,7 @@ from sklearn.preprocessing import normalize, minmax_scale
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.05
+timeoutamount = 0.03
 
 globalMessage = None
 timeout = time
@@ -22,12 +22,15 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 10
+epsilon_decrease_factor = 5
 
 ray_high_tolerance = 2.5
+ray_reward_factor = 0.1
 
 distanceReward = True
 rayReward = True
+
+correct_move = 0.0
 
 
 class DQNAgent():
@@ -178,24 +181,16 @@ def ray_reward(data, returnArray):
             _reward = 0.0
             if ray <= ray_high_tolerance:
                 active_rays += 1
-                _reward -= abs(ray-ray_high_tolerance)
-
-            else:
-                _reward += 0.01
+                _reward -= abs(ray-ray_high_tolerance)*ray_reward_factor
 
             rayRewards[iterator] = _reward
             iterator += 1
 
-        #if active_rays == 0:
-        #    _iterator = 0
-        #    for _rayReward in rayRewards:
-        #        rayRewards[_iterator] = 1.0
-        #        _iterator += 1
-        #else:
-        #    _iterator = 0
-        #    for _rayReward in rayRewards:
-        #        rayRewards[_iterator] = 0.0-active_rays
-        #        _iterator += 1
+        if active_rays != 0:
+            _iterator = 0
+            for _rayReward in rayRewards:
+                rayRewards[_iterator] *= active_rays*ray_reward_factor
+                _iterator += 1
 
         return rayRewards
 
@@ -205,25 +200,27 @@ def ray_reward(data, returnArray):
         for ray in data.rays:
             if ray <= ray_high_tolerance:
                 active_rays += 1
-                reward -= abs(ray-ray_high_tolerance)
-            else:
-                reward += 0.01
+                reward -= abs(ray-ray_high_tolerance)*ray_reward_factor
 
-       # if active_rays == 0:
-       #     reward = 1.0
-       # else:
-       #     reward -= 0-active_rays
+        if active_rays != 0:
+            reward *= active_rays*ray_reward_factor
 
         return reward
 
 
-
 def distance_reward(dist, origDist, last_dist): # origDist: 17.189245223999023
         reward = 0
-        if last_dist < dist:
-            reward -= abs(origDist - dist) * abs(dist*-1)
-        else:
-            reward += abs(origDist - dist) * (abs(dist*-1)*0.001)
+        global correct_move
+
+        if last_dist < dist: # punish when agent moves away from target
+            correct_move = 0.0
+            reward -= abs(origDist - dist) * dist
+        else: # reward when agent moves closer to target
+            correct_move += 1.0
+            reward += abs(origDist - dist)*0.998
+
+        reward = reward+correct_move
+
         return reward
 
 
@@ -233,24 +230,25 @@ def calculate_reward(message, old_dist):
         agent.increment_goal_count()
         reward += 100
 
-    if distanceReward:
-        reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, old_dist)
-
     if rayReward:
         reward += ray_reward(message, False)
+
+    if distanceReward:
+        reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, old_dist)
 
     return reward
 
 
 def get_next_state(distance, origDistance, message, last_dist):
     reward = 0
-    if distanceReward:
-        reward += distance_reward(distance, origDistance, last_dist)
 
     if rayReward:
         rayRewards = ray_reward(message, True)
     else:
         rayRewards = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    if distanceReward:
+        reward += distance_reward(distance, origDistance, last_dist)
 
     return np.array([[reward,
                       rayRewards[0],
