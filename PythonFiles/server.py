@@ -22,10 +22,10 @@ state_size = 17
 action_size = 8
 batch_size = 64
 num_of_episodes = 5000
-epsilon_decrease_factor = 5
+epsilon_decrease_factor = 15
 
-ray_high_tolerance = 2.5
-ray_reward_factor = 0.1
+ray_high_tolerance = 3
+ray_punish_factor = 1.1
 
 distanceReward = True
 rayReward = True
@@ -181,7 +181,7 @@ def ray_reward(data, returnArray):
             _reward = 0.0
             if ray <= ray_high_tolerance:
                 active_rays += 1
-                _reward -= abs(ray-ray_high_tolerance)*ray_reward_factor
+                _reward -= abs(ray-ray_high_tolerance)*ray_punish_factor
 
             rayRewards[iterator] = _reward
             iterator += 1
@@ -189,7 +189,7 @@ def ray_reward(data, returnArray):
         if active_rays != 0:
             _iterator = 0
             for _rayReward in rayRewards:
-                rayRewards[_iterator] *= active_rays*ray_reward_factor
+                rayRewards[_iterator] *= active_rays
                 _iterator += 1
 
         return rayRewards
@@ -200,10 +200,10 @@ def ray_reward(data, returnArray):
         for ray in data.rays:
             if ray <= ray_high_tolerance:
                 active_rays += 1
-                reward -= abs(ray-ray_high_tolerance)*ray_reward_factor
+                reward -= abs(ray-ray_high_tolerance)
 
         if active_rays != 0:
-            reward *= active_rays*ray_reward_factor
+            reward *= active_rays
 
         return reward
 
@@ -216,8 +216,8 @@ def distance_reward(dist, origDist, last_dist): # origDist: 17.189245223999023
             correct_move = 0.0
             reward -= abs(origDist - dist) * dist
         else: # reward when agent moves closer to target
-            correct_move += 1.0
-            reward += abs(origDist - dist)*0.998
+            correct_move += 0.001
+            reward += abs(origDist - dist)
 
         reward = reward+correct_move
 
@@ -403,7 +403,7 @@ while True:
     print("Total goal count: " + str(agent.goal_count))
     if agent.epsilon <= agent.epsilon_min and agent.goal_count > 50:
         print("This agent has figured it out!")
-        agent.model.save('robot_model_over 10_goals.h5')
+        agent.model.save('robot_model_over_50_goals.h5')
         timeout.sleep(1)
     agent.model.save('robot_model.h5')
     timeout.sleep(1)

@@ -30,7 +30,7 @@ public class MoveScript : MonoBehaviour
 
     public GameObject[] walls;
 
-    public bool incrementWalls = true;
+    public bool incrementWalls = false;
 
 
     // Start is called before the first frame update
