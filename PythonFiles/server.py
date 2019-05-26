@@ -13,7 +13,7 @@ from sklearn.preprocessing import normalize, minmax_scale
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.03
+timeoutamount = 0.04
 
 globalMessage = None
 timeout = time
@@ -216,7 +216,7 @@ def distance_reward(dist, origDist, last_dist): # origDist: 17.189245223999023
             correct_move = 0.0
             reward -= abs(origDist - dist) * dist
         else: # reward when agent moves closer to target
-            correct_move += 0.001
+            correct_move += 0.1
             reward += abs(origDist - dist)
 
         reward = reward+correct_move
@@ -375,7 +375,7 @@ while True:
 
                 #print_rays(next_state[0])
 
-                print(reward)
+                #print(reward)
 
                 done = is_done(globalMessage)
 
