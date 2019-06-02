@@ -7,42 +7,41 @@ from collections import deque
 from keras.models import Sequential, load_model
 from keras.layers import Dense, LeakyReLU, Softmax
 from keras.optimizers import Adam
-from sklearn.preprocessing import normalize, minmax_scale
-
+from sklearn.preprocessing import normalize, minmax_scale, MinMaxScaler, StandardScaler
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.04
+timeoutamount = 0.05
 
 globalMessage = None
 timeout = time
 
 state_size = 17
 action_size = 8
-batch_size = 64
+batch_size = 32
 num_of_episodes = 5000
-epsilon_decrease_factor = 15
+epsilon_decrease_factor = 10
 
-ray_high_tolerance = 3
-ray_punish_factor = 1.1
+ray_high_tolerance = 3.8
 
 distanceReward = True
 rayReward = True
 
 correct_move = 0.0
+wrong_move = 0.0
 
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=1000000)
+        self.memory = deque(maxlen=10000)
         self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.998
-        self.learning_rate = 0.001
+        self.learning_rate = 0.1
         self.model = self.model()
         self.goal_count = 0
 
@@ -85,7 +84,7 @@ class DQNAgent():
         # We have to decrease the epsilon each time to make the actions less and less random
         if self.epsilon > self.epsilon_min:
             if episode % epsilon_decrease_factor == 0 and not episode == 0:
-                print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
+                #print("!!!!!!!!!!!!!!!!!DECREASE : " + str(episode) + "%" + str(epsilon_decrease_factor))
                 self.epsilon *= self.epsilon_decay
 
     def increment_goal_count(self):
@@ -164,24 +163,31 @@ def is_done(message):
         else:
             isDone = False
 
-    if message.hasReachedGoal:
-        message.hasReachedGoal = False
-        isDone = True
-
     return isDone
 
 
-def ray_reward(data, returnArray):
+def get_ray_reward_array():
+    rayReward = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    iter = 0
+    for reward in rayReward:
+        rayReward[iter] = 0.0
+        iter += 1
+    return rayReward
+
+
+def ray_reward(data, returnArray, last_rays):
     active_rays = 0
+    global movement_factor
 
     if returnArray:
-        rayRewards = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        rayRewards = get_ray_reward_array()
         iterator = 0
         for ray in data.rays:
             _reward = 0.0
             if ray <= ray_high_tolerance:
                 active_rays += 1
-                _reward -= abs(ray-ray_high_tolerance)*ray_punish_factor
+                if last_rays[iterator] > ray:
+                    _reward -= abs(ray-ray_high_tolerance)
 
             rayRewards[iterator] = _reward
             iterator += 1
@@ -196,11 +202,14 @@ def ray_reward(data, returnArray):
 
     else:
         reward = 0
-
+        iterator = 0
         for ray in data.rays:
             if ray <= ray_high_tolerance:
                 active_rays += 1
-                reward -= abs(ray-ray_high_tolerance)
+                if last_rays[iterator] > ray:
+                    reward -= abs(ray-ray_high_tolerance)
+            iterator += 1
+
 
         if active_rays != 0:
             reward *= active_rays
@@ -210,28 +219,34 @@ def ray_reward(data, returnArray):
 
 def distance_reward(dist, origDist, last_dist): # origDist: 17.189245223999023
         reward = 0
-        global correct_move
+        global correct_move, wrong_move
 
         if last_dist < dist: # punish when agent moves away from target
-            correct_move = 0.0
-            reward -= abs(origDist - dist) * dist
+            wrong_move -= 1.1
+            reward -= abs(origDist - dist)*0.01
         else: # reward when agent moves closer to target
-            correct_move += 0.1
-            reward += abs(origDist - dist)
+            correct_move += 0.001
+            #reward += abs(origDist - dist)*0.005
 
-        reward = reward+correct_move
+        move_factor = 1.0
+        if correct_move > 0.0:
+            move_factor = correct_move
+            wrong_move = 0.0
+        elif wrong_move < 0.0:
+            move_factor = wrong_move
+            correct_move = 0.0
 
-        return reward
+        return reward*move_factor
 
 
-def calculate_reward(message, old_dist):
+def calculate_reward(message, old_dist, last_rays):
     reward = 0
     if message.hasReachedGoal:
         agent.increment_goal_count()
-        reward += 100
+        reward += 1000
 
     if rayReward:
-        reward += ray_reward(message, False)
+        reward += ray_reward(message, False, last_rays)
 
     if distanceReward:
         reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, old_dist)
@@ -239,13 +254,13 @@ def calculate_reward(message, old_dist):
     return reward
 
 
-def get_next_state(distance, origDistance, message, last_dist):
+def get_next_state(distance, origDistance, message, last_dist, last_rays):
     reward = 0
 
     if rayReward:
-        rayRewards = ray_reward(message, True)
+        rayRewards = ray_reward(message, True, last_rays)
     else:
-        rayRewards = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        rayRewards = get_ray_reward_array()
 
     if distanceReward:
         reward += distance_reward(distance, origDistance, last_dist)
@@ -283,7 +298,7 @@ def update_message(message):
     socket.send_string(newMessage.to_string())
     incoming = handleJsonResponse(socket.recv())
     if incoming.hasReachedGoal:
-        print("GOOOOOOOOOOAAAAAAAAALLLLL!!!!!!!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! GOOOOOOOOOOAAAAAAAAALLLLLLLLL !!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ")
 
     timeout.sleep(timeoutamount)
     return incoming
@@ -357,10 +372,15 @@ while True:
                            globalMessage.rays[14],
                            globalMessage.rays[15]]])
         state = np.reshape(state, [1, state_size])
+        reward = 0.0
 
         # Learning goes on here
         # We make sure that the agent does not get stuck
+        iterator = 0
         for time in range(500):
+
+            if iterator == 0:
+                timeout.sleep(0.2)
 
             if not globalMessage.done:
                 previous_goal_count = agent.goal_count
@@ -368,19 +388,19 @@ while True:
                 globalMessage.move = translate_action(action)
 
                 last_distance = globalMessage.distanceToGoal
+                last_rays = globalMessage.rays
                 globalMessage = update_message(globalMessage)
 
-                next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance)
-                reward = calculate_reward(globalMessage, last_distance)
-
-                #print_rays(next_state[0])
-
-                #print(reward)
+                next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance, last_rays)
+                reward = calculate_reward(globalMessage, last_distance, last_rays)
 
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
-                reward = reward if not done else -100
+                reward = reward if not done else -1000
+
+                # print_rays(next_state[0])
+                print(reward)
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
@@ -388,6 +408,9 @@ while True:
                 next_state = np.reshape(state, [1, state_size])
 
                 state = next_state
+
+                if globalMessage.hasReachedGoal:
+                    done = True
 
                 if done:
                     print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count))
@@ -399,12 +422,14 @@ while True:
                 if len(agent.memory) > batch_size:
                     agent.train_replay(batch_size, iter)
 
+                iterator += 1
+
     reset_program(globalMessage)
     print("Total goal count: " + str(agent.goal_count))
     if agent.epsilon <= agent.epsilon_min and agent.goal_count > 50:
         print("This agent has figured it out!")
         agent.model.save('robot_model_over_50_goals.h5')
         timeout.sleep(1)
-    agent.model.save('robot_model.h5')
+    agent.model.save('robot_model_wall.h5')
     timeout.sleep(1)
     socket.context.__exit__()
