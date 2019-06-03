@@ -12,48 +12,48 @@ from sklearn.preprocessing import normalize, minmax_scale, MinMaxScaler, Standar
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.05
+timeoutamount = 0.09
 
 globalMessage = None
 timeout = time
 
 state_size = 17
 action_size = 8
-batch_size = 32
+batch_size = 20
 num_of_episodes = 5000
 epsilon_decrease_factor = 10
 
-ray_high_tolerance = 3.8
+ray_high_tolerance = 3
 
-distanceReward = True
-rayReward = True
+enable_distance_reward = True
+enable_ray_reward = True
 
-correct_move = 0.0
-wrong_move = 0.0
+correct_move = 0
+wrong_move = 0
 
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=10000)
+        self.memory = deque(maxlen=5000)
         self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.998
-        self.learning_rate = 0.1
+        self.learning_rate = 0.001
         self.model = self.model()
         self.goal_count = 0
 
     def model(self):
         model = Sequential()
-        #model.add(Dense(24, input_dim=self.state_size, activation='relu'))
-        model.add(Dense(24, input_dim=self.state_size))
-        model.add(LeakyReLU())
-        #model.add(Dense(24, activation='relu'))
-        model.add(Dense(24))
-        model.add(LeakyReLU())
-        model.add(Dense(self.action_size))
+        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
+        #model.add(Dense(24, input_dim=self.state_size))
+        #model.add(LeakyReLU())
+        model.add(Dense(24, activation='relu'))
+        #model.add(Dense(24))
+        #model.add(LeakyReLU())
+        model.add(Dense(self.action_size, activation='linear'))
         #model.add(Softmax())
         model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
         return model
@@ -166,122 +166,191 @@ def is_done(message):
     return isDone
 
 
-def get_ray_reward_array():
+def get_ray_array():
     rayReward = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     iter = 0
     for reward in rayReward:
-        rayReward[iter] = 0.0
+        rayReward[iter] = 5
         iter += 1
     return rayReward
 
+# 0 : fwd
+# 1 : back
+# 2 : left
+# 3 : right
+# 4 : left+fwd
+# 5 : left+fwd+fwd
+# 6 : fwd+left+left
+# 7 : right+fwd
+# 8 : right+fwd+fwd
+# 9 : fwd+right+right
+# 10 : left+back
+# 11 : left+back+left
+# 12 : left+back+back
+# 13 : right+back
+# 14 : right+back+right
+# 15 : right+back+back
+def action_to_ray_conversion(action, ray_index):
+    punish = -0.5
+    reward = 0.5
 
-def ray_reward(data, returnArray, last_rays):
+    if action == 0:  # fwd
+        if ray_index == 0 or ray_index == 5 or ray_index == 8:
+            return punish
+        else:
+            return reward
+
+    elif action == 1:  # back
+        if ray_index == 1 or ray_index == 12 or ray_index == 15:
+            return punish
+        else:
+            return reward
+
+    elif action == 2:  # left
+        if ray_index == 2 or ray_index == 6 or ray_index == 11:
+            return punish
+        else:
+            return reward
+
+    elif action == 3:  # right
+        if ray_index == 3 or ray_index == 9 or ray_index == 14:
+            return punish
+        else:
+            return reward
+
+    elif action == 4:  # fl
+        if ray_index == 4 or ray_index == 5 or ray_index == 6:
+            return punish
+        else:
+            return reward
+
+    elif action == 5:  # fr
+        if ray_index == 7 or ray_index == 8 or ray_index == 9:
+            return punish
+        else:
+            return reward
+
+    elif action == 6:  # bl
+        if ray_index == 10 or ray_index == 11 or ray_index == 12:
+            return punish
+        else:
+            return reward
+
+    elif action == 7:  # br
+        if ray_index == 13 or ray_index == 14 or ray_index == 15:
+            return punish
+        else:
+            return reward
+
+    return 0.0
+
+
+def ns_ray(data, last_rays):
     active_rays = 0
-    global movement_factor
 
-    if returnArray:
-        rayRewards = get_ray_reward_array()
-        iterator = 0
-        for ray in data.rays:
-            _reward = 0.0
-            if ray <= ray_high_tolerance:
-                active_rays += 1
-                if last_rays[iterator] > ray:
-                    _reward -= abs(ray-ray_high_tolerance)
+    _ray_rewards = get_ray_array()
+    _iterator = 0
+    for ray in data.rays:
+        _reward = 0.0
+        if ray <= ray_high_tolerance:
+            active_rays += 1
+            if last_rays[_iterator] > ray:
+                _reward -= int(abs(ray-ray_high_tolerance))
 
-            rayRewards[iterator] = _reward
-            iterator += 1
+        _ray_rewards[_iterator] = _reward
+        _iterator += 1
 
-        if active_rays != 0:
-            _iterator = 0
-            for _rayReward in rayRewards:
-                rayRewards[_iterator] *= active_rays
-                _iterator += 1
+    if active_rays >= 3:
+        _iterator = 0
+        for _ray_reward in _ray_rewards:
+            _ray_rewards[_iterator] *= active_rays
+            _iterator += 1
 
-        return rayRewards
-
-    else:
-        reward = 0
-        iterator = 0
-        for ray in data.rays:
-            if ray <= ray_high_tolerance:
-                active_rays += 1
-                if last_rays[iterator] > ray:
-                    reward -= abs(ray-ray_high_tolerance)
-            iterator += 1
+    return _ray_rewards
 
 
-        if active_rays != 0:
-            reward *= active_rays
-
-        return reward
-
-
-def distance_reward(dist, origDist, last_dist): # origDist: 17.189245223999023
+def ns_distance(dist, orig_dist, last_dist):
         reward = 0
         global correct_move, wrong_move
 
         if last_dist < dist: # punish when agent moves away from target
-            wrong_move -= 1.1
-            reward -= abs(origDist - dist)*0.01
+            wrong_move -= 1
+            reward -= abs(orig_dist - dist)
         else: # reward when agent moves closer to target
-            correct_move += 0.001
-            #reward += abs(origDist - dist)*0.005
+            correct_move += 1
+            #reward += abs(orig_dist - dist)*0.1
 
         move_factor = 1.0
         if correct_move > 0.0:
-            move_factor = correct_move
+            #move_factor += correct_move
             wrong_move = 0.0
         elif wrong_move < 0.0:
-            move_factor = wrong_move
+            move_factor -= wrong_move
             correct_move = 0.0
 
-        return reward*move_factor
+        return int(reward*move_factor)
 
 
-def calculate_reward(message, old_dist, last_rays):
+def get_reward(message, old_dist, last_rays, action):
     reward = 0
     if message.hasReachedGoal:
+        for ray in message.rays:
+            if ray <= 0.7:
+                return -100
         agent.increment_goal_count()
-        reward += 1000
+        reward = 1000
+        return reward
 
-    if rayReward:
-        reward += ray_reward(message, False, last_rays)
+    if enable_distance_reward:
+        if message.distanceToGoal < old_dist:
+            reward = 0.0
+        else:
+            reward = -1.0
 
-    if distanceReward:
-        reward += distance_reward(message.distanceToGoal, message.origDistanceToGoal, old_dist)
+        if message.origDistanceToGoal < message.distanceToGoal:
+            reward -= 1.0
+
+    if enable_ray_reward:
+        active_rays = 0
+        _iterator = 0
+        for ray in message.rays:
+            if ray <= ray_high_tolerance:
+                active_rays += 1
+            _iterator += 1
+
+        if active_rays > 3:
+            reward = -1.0
 
     return reward
 
 
 def get_next_state(distance, origDistance, message, last_dist, last_rays):
-    reward = 0
 
-    if rayReward:
-        rayRewards = ray_reward(message, True, last_rays)
+    if enable_ray_reward:
+        ray_state = ns_ray(message, last_rays)
     else:
-        rayRewards = get_ray_reward_array()
+        ray_state = get_ray_array()
 
-    if distanceReward:
-        reward += distance_reward(distance, origDistance, last_dist)
+    if enable_distance_reward:
+        dist_state = ns_distance(distance, origDistance, last_dist)
 
-    return np.array([[reward,
-                      rayRewards[0],
-                      rayRewards[1],
-                      rayRewards[2],
-                      rayRewards[3],
-                      rayRewards[4],
-                      rayRewards[5],
-                      rayRewards[6],
-                      rayRewards[7],
-                      rayRewards[8],
-                      rayRewards[9],
-                      rayRewards[10],
-                      rayRewards[11],
-                      rayRewards[12],
-                      rayRewards[13],
-                      rayRewards[14],
-                      rayRewards[15]]])
+    return np.array([[dist_state,
+                      ray_state[0],
+                      ray_state[1],
+                      ray_state[2],
+                      ray_state[3],
+                      ray_state[4],
+                      ray_state[5],
+                      ray_state[6],
+                      ray_state[7],
+                      ray_state[8],
+                      ray_state[9],
+                      ray_state[10],
+                      ray_state[11],
+                      ray_state[12],
+                      ray_state[13],
+                      ray_state[14],
+                      ray_state[15]]])
 
 
 def update_message(message):
@@ -305,6 +374,9 @@ def update_message(message):
 
 
 def reset_program(message):
+    global correct_move, wrong_move
+    correct_move = 0.0
+    wrong_move = 0.0
     newMessage = Message(None,
                          message.reward,
                          message.hasReachedGoal,
@@ -321,63 +393,75 @@ def reset_program(message):
     return globalMessage
 
 
+def print_distance(distance):
+    print(distance)
+
+
 def print_rays(rays):
-    print("Ray1: {}".format(rays[1]))
-    print("Ray2: {}".format(rays[2]))
-    print("Ray3: {}".format(rays[3]))
-    print("Ray4: {}".format(rays[4]))
-    print("Ray5: {}".format(rays[5]))
-    print("Ray6: {}".format(rays[6]))
-    print("Ray7: {}".format(rays[7]))
-    print("Ray8: {}".format(rays[8]))
-    print("Ray9: {}".format(rays[9]))
-    print("Ray10: {}".format(rays[10]))
-    print("Ray11: {}".format(rays[11]))
-    print("Ray12: {}".format(rays[12]))
-    print("Ray13: {}".format(rays[13]))
-    print("Ray14: {}".format(rays[14]))
-    print("Ray15: {}".format(rays[15]))
-    print("Ray16: {}".format(rays[16]))
+    print("Ray0: {}".format(rays[1]))
+    print("Ray1: {}".format(rays[2]))
+    print("Ray2: {}".format(rays[3]))
+    print("Ray3: {}".format(rays[4]))
+    print("Ray4: {}".format(rays[5]))
+    print("Ray5: {}".format(rays[6]))
+    print("Ray6: {}".format(rays[7]))
+    print("Ray7: {}".format(rays[8]))
+    print("Ray8: {}".format(rays[9]))
+    print("Ray9: {}".format(rays[10]))
+    print("Ray10: {}".format(rays[11]))
+    print("Ray11: {}".format(rays[12]))
+    print("Ray12: {}".format(rays[13]))
+    print("Ray13: {}".format(rays[14]))
+    print("Ray14: {}".format(rays[15]))
+    print("Ray15: {}".format(rays[16]))
 
-def load_old_model(agent):
-    model = load_model("robot_model_over 10_goals.h5")
-    agent.model = model
-    agent.epsilon = agent.epsilon_min
+#def load_old_model(agent):
+    #model = load_model("robot_model_over 10_goals.h5")
+    #agent.model = model
+    #agent.epsilon = agent.epsilon_min
 
+
+def get_initial_state(dist, rays):
+    global init_dist
+    return np.array([[
+        dist,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays,
+        rays
+    ]])
 
 agent = DQNAgent(state_size, action_size)
 #load_old_model(agent)
 while True:
-
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
     globalMessage = incoming
 
+    init_dist = globalMessage.origDistanceToGoal
+    init_ray = globalMessage.rays[0]
+
     for iter in range(num_of_episodes):
-        state = np.array([[globalMessage.distanceToGoal,
-                           globalMessage.rays[0],
-                           globalMessage.rays[1],
-                           globalMessage.rays[2],
-                           globalMessage.rays[3],
-                           globalMessage.rays[4],
-                           globalMessage.rays[5],
-                           globalMessage.rays[6],
-                           globalMessage.rays[7],
-                           globalMessage.rays[8],
-                           globalMessage.rays[9],
-                           globalMessage.rays[10],
-                           globalMessage.rays[11],
-                           globalMessage.rays[12],
-                           globalMessage.rays[13],
-                           globalMessage.rays[14],
-                           globalMessage.rays[15]]])
+        state = get_initial_state(init_dist, init_ray)
         state = np.reshape(state, [1, state_size])
         reward = 0.0
 
         # Learning goes on here
         # We make sure that the agent does not get stuck
         iterator = 0
-        for time in range(500):
+        for time in range(5000):
 
             if iterator == 0:
                 timeout.sleep(0.2)
@@ -392,14 +476,17 @@ while True:
                 globalMessage = update_message(globalMessage)
 
                 next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance, last_rays)
-                reward = calculate_reward(globalMessage, last_distance, last_rays)
+                next_state = np.reshape(next_state, [1, state_size])
+
+                reward = get_reward(globalMessage, last_distance, last_rays, action)
 
                 done = is_done(globalMessage)
 
                 # Give a penalty if agent is just still
-                reward = reward if not done else -1000
+                reward = reward if not done else -100
 
-                # print_rays(next_state[0])
+                #print_distance(next_state[0][0])
+                #print_rays(next_state[0])
                 print(reward)
 
                 # We want the agent to remember
@@ -413,16 +500,16 @@ while True:
                     done = True
 
                 if done:
-                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count))
-                    if agent.goal_count % 3 == 0 and not previous_goal_count == agent.goal_count:
+                    print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count) + " Reward: " + str(reward))
+                    if agent.goal_count % 2 == 0 and not previous_goal_count == agent.goal_count:
                         globalMessage.addWall = True
                     globalMessage = reset_program(globalMessage)
                     break
 
-                if len(agent.memory) > batch_size:
-                    agent.train_replay(batch_size, iter)
+            if len(agent.memory) > batch_size:
+                agent.train_replay(batch_size, iter)
 
-                iterator += 1
+            iterator += 1
 
     reset_program(globalMessage)
     print("Total goal count: " + str(agent.goal_count))
