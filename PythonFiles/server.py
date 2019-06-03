@@ -93,7 +93,7 @@ class DQNAgent():
 
 # JSON Message Class to send to Unity
 class Message():
-    def __init__(self, move, reward, hasReachedGoal, rays, done, distanceToGoal, origDistanceToGoal, addWall):
+    def __init__(self, move, reward, hasReachedGoal, rays, done, distanceToGoal, origDistanceToGoal, addWall, goalCount):
         self.move = move
         self.reward = reward
         self.hasReachedGoal = hasReachedGoal
@@ -102,6 +102,7 @@ class Message():
         self.distanceToGoal = distanceToGoal
         self.origDistanceToGoal = origDistanceToGoal
         self.addWall = addWall
+        self.goalCount = goalCount
 
     def to_string(self):
         return json.dumps(
@@ -113,7 +114,8 @@ class Message():
                 "done": self.done,
                 "distanceToGoal": self.distanceToGoal,
                 "origDistanceToGoal": self.origDistanceToGoal,
-                "addWall": self.addWall
+                "addWall": self.addWall,
+                "goalCount": self.goalCount
             }
         )
 
@@ -126,12 +128,13 @@ class Message():
         print("distanceToGoal", self.distanceToGoal)
         print("origDistanceToGoal", self.origDistanceToGoal)
         print("addWall", self.addWall)
+        print("goalCount", self.goalCount)
 
 
 def handleJsonResponse(data):
     dataReceived = json.loads(data.decode('utf-8'))
     type(dataReceived)
-    return Message(dataReceived['move'], dataReceived['reward'], dataReceived['hasReachedGoal'], dataReceived['rays'], dataReceived['done'], dataReceived['distanceToGoal'], dataReceived['originalDistanceToGoal'], dataReceived['addWall'])
+    return Message(dataReceived['move'], dataReceived['reward'], dataReceived['hasReachedGoal'], dataReceived['rays'], dataReceived['done'], dataReceived['distanceToGoal'], dataReceived['originalDistanceToGoal'], dataReceived['addWall'], dataReceived['goalCount'])
 
 
 def translate_action(action):
@@ -170,7 +173,7 @@ def get_ray_array():
     rayReward = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     iter = 0
     for reward in rayReward:
-        rayReward[iter] = 5
+        rayReward[iter] = 0.0
         iter += 1
     return rayReward
 
@@ -191,8 +194,8 @@ def get_ray_array():
 # 14 : right+back+right
 # 15 : right+back+back
 def action_to_ray_conversion(action, ray_index):
-    punish = -0.5
-    reward = 0.5
+    punish = -1.0
+    reward = 0.0
 
     if action == 0:  # fwd
         if ray_index == 0 or ray_index == 5 or ray_index == 8:
@@ -245,7 +248,7 @@ def action_to_ray_conversion(action, ray_index):
     return 0.0
 
 
-def ns_ray(data, last_rays):
+def ns_ray(data, last_rays, action):
     active_rays = 0
 
     _ray_rewards = get_ray_array()
@@ -256,6 +259,7 @@ def ns_ray(data, last_rays):
             active_rays += 1
             if last_rays[_iterator] > ray:
                 _reward -= int(abs(ray-ray_high_tolerance))
+                _reward -= int(action_to_ray_conversion(action, _iterator))
 
         _ray_rewards[_iterator] = _reward
         _iterator += 1
@@ -294,16 +298,11 @@ def ns_distance(dist, orig_dist, last_dist):
 def get_reward(message, old_dist, last_rays, action):
     reward = 0
     if message.hasReachedGoal:
-        for ray in message.rays:
-            if ray <= 0.7:
-                return -100
-        agent.increment_goal_count()
-        reward = 1000
-        return reward
+        return 1000
 
     if enable_distance_reward:
         if message.distanceToGoal < old_dist:
-            reward = 0.0
+            reward = 1.0
         else:
             reward = -1.0
 
@@ -324,15 +323,16 @@ def get_reward(message, old_dist, last_rays, action):
     return reward
 
 
-def get_next_state(distance, origDistance, message, last_dist, last_rays):
+def get_next_state(message, last_dist, last_rays, action):
+    dist_state = 0.0
 
     if enable_ray_reward:
-        ray_state = ns_ray(message, last_rays)
+        ray_state = ns_ray(message, last_rays, action)
     else:
         ray_state = get_ray_array()
 
     if enable_distance_reward:
-        dist_state = ns_distance(distance, origDistance, last_dist)
+        dist_state = ns_distance(message.distanceToGoal, message.origDistanceToGoal, last_dist)
 
     return np.array([[dist_state,
                       ray_state[0],
@@ -363,20 +363,20 @@ def update_message(message):
                       message.done,
                       message.distanceToGoal,
                       message.origDistanceToGoal,
-                      message.addWall)
+                      message.addWall,
+                      agent.goal_count)
     socket.send_string(newMessage.to_string())
     incoming = handleJsonResponse(socket.recv())
     if incoming.hasReachedGoal:
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! GOOOOOOOOOOAAAAAAAAALLLLLLLLL !!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ")
+        agent.increment_goal_count()
+        incoming.goalCount = agent.goal_count
 
     timeout.sleep(timeoutamount)
     return incoming
 
 
 def reset_program(message):
-    global correct_move, wrong_move
-    correct_move = 0.0
-    wrong_move = 0.0
     newMessage = Message(None,
                          message.reward,
                          message.hasReachedGoal,
@@ -384,12 +384,14 @@ def reset_program(message):
                          True,
                          message.distanceToGoal,
                          message.origDistanceToGoal,
-                         message.addWall)
+                         message.addWall,
+                         agent.goal_count)
     socket.send_string(newMessage.to_string())
     globalMessage = handleJsonResponse(socket.recv())
     timeout.sleep(timeoutamount)
     globalMessage.move = None
     globalMessage.hasReachedGoal = False
+    globalMessage.goalCount = agent.goal_count
     return globalMessage
 
 
@@ -475,7 +477,7 @@ while True:
                 last_rays = globalMessage.rays
                 globalMessage = update_message(globalMessage)
 
-                next_state = get_next_state(globalMessage.distanceToGoal, globalMessage.origDistanceToGoal, globalMessage, last_distance, last_rays)
+                next_state = get_next_state(globalMessage, last_distance, last_rays, action)
                 next_state = np.reshape(next_state, [1, state_size])
 
                 reward = get_reward(globalMessage, last_distance, last_rays, action)

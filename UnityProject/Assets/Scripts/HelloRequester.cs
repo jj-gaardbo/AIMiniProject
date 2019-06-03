@@ -46,6 +46,8 @@ public class HelloRequester : RunAbleThread
                             Debug.Log("Add a fucking wall");
                             Globals.addANewWall();
                         }
+
+                        Globals.setGoalCount(jsonMessage.goalCount);
                     }
                 }       
             }

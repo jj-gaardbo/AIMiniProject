@@ -16,6 +16,11 @@ public static class Globals{
     public static bool done;
     public static float distanceToGoal;
     public static float originalDistanceToGoal;
+    public static int goalCount;
+
+    public static void setGoalCount(int count){
+        goalCount = count;
+    }
 
     public static void addANewWall(){
         numWalls++;
