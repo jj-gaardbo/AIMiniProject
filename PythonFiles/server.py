@@ -7,12 +7,14 @@ from collections import deque
 from keras.models import Sequential, load_model
 from keras.layers import Dense, LeakyReLU, Softmax
 from keras.optimizers import Adam
+from keras.utils import plot_model
+
 from sklearn.preprocessing import normalize, minmax_scale, MinMaxScaler, StandardScaler
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.09
+timeoutamount = 0.095
 
 globalMessage = None
 timeout = time
@@ -20,10 +22,10 @@ timeout = time
 state_size = 17
 action_size = 8
 batch_size = 20
-num_of_episodes = 5000
+num_of_episodes = 2000
 epsilon_decrease_factor = 10
 
-ray_high_tolerance = 3
+ray_high_tolerance = 3.5
 
 enable_distance_reward = True
 enable_ray_reward = True
@@ -31,12 +33,13 @@ enable_ray_reward = True
 correct_move = 0
 wrong_move = 0
 
+previous_goal_count = 0
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=5000)
+        self.memory = deque(maxlen=4000)
         self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
@@ -53,14 +56,16 @@ class DQNAgent():
         model.add(Dense(24, activation='relu'))
         #model.add(Dense(24))
         #model.add(LeakyReLU())
-        model.add(Dense(self.action_size, activation='linear'))
+        model.add(Dense(self.action_size))
         #model.add(Softmax())
         model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        plot_model(model, to_file='model.png', show_shapes=True)
         return model
 
     # Make the agent remember stuff
     def mem_remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
+        #print("length" + str(self.memory.__len__()))
 
     # Force the agent to do random exploration which gradually decreases its epsilon
     def act(self, state):
@@ -259,40 +264,42 @@ def ns_ray(data, last_rays, action):
             active_rays += 1
             if last_rays[_iterator] > ray:
                 _reward -= int(abs(ray-ray_high_tolerance))
-                _reward -= int(action_to_ray_conversion(action, _iterator))
+            _reward -= int(action_to_ray_conversion(action, _iterator))
 
         _ray_rewards[_iterator] = _reward
         _iterator += 1
 
-    if active_rays >= 3:
+    if active_rays > 0:
         _iterator = 0
         for _ray_reward in _ray_rewards:
-            _ray_rewards[_iterator] *= active_rays
+            _ray_rewards[_iterator] -= active_rays
             _iterator += 1
 
     return _ray_rewards
 
 
 def ns_distance(dist, orig_dist, last_dist):
-        reward = 0
         global correct_move, wrong_move
 
         if last_dist < dist: # punish when agent moves away from target
             wrong_move -= 1
-            reward -= abs(orig_dist - dist)
+            reward = -0.005
         else: # reward when agent moves closer to target
             correct_move += 1
-            #reward += abs(orig_dist - dist)*0.1
+            reward = 0.001
+
+        if orig_dist < dist:
+            reward -= 0.01
 
         move_factor = 1.0
         if correct_move > 0.0:
-            #move_factor += correct_move
+            move_factor += correct_move
             wrong_move = 0.0
         elif wrong_move < 0.0:
             move_factor -= wrong_move
             correct_move = 0.0
 
-        return int(reward*move_factor)
+        return reward*move_factor
 
 
 def get_reward(message, old_dist, last_rays, action):
@@ -301,24 +308,24 @@ def get_reward(message, old_dist, last_rays, action):
         return 1000
 
     if enable_distance_reward:
-        if message.distanceToGoal < old_dist:
-            reward = 1.0
-        else:
-            reward = -1.0
+        # if message.distanceToGoal < old_dist:
+        #     reward = 1.0
+        # else:
+        #     reward = -2.0
 
         if message.origDistanceToGoal < message.distanceToGoal:
-            reward -= 1.0
+            reward -= 2.0
+        else:
+            reward = 1.0
 
     if enable_ray_reward:
         active_rays = 0
-        _iterator = 0
         for ray in message.rays:
             if ray <= ray_high_tolerance:
                 active_rays += 1
-            _iterator += 1
 
-        if active_rays > 3:
-            reward = -1.0
+        if active_rays > 0:
+            reward -= active_rays
 
     return reward
 
@@ -417,10 +424,11 @@ def print_rays(rays):
     print("Ray14: {}".format(rays[15]))
     print("Ray15: {}".format(rays[16]))
 
-#def load_old_model(agent):
-    #model = load_model("robot_model_over 10_goals.h5")
-    #agent.model = model
-    #agent.epsilon = agent.epsilon_min
+
+def load_old_model(agent):
+    model = load_model("model_.h5")
+    agent.model = model
+    return agent
 
 
 def get_initial_state(dist, rays):
@@ -446,7 +454,8 @@ def get_initial_state(dist, rays):
     ]])
 
 agent = DQNAgent(state_size, action_size)
-#load_old_model(agent)
+#agent = load_old_model(agent)
+
 while True:
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
@@ -460,10 +469,15 @@ while True:
         state = np.reshape(state, [1, state_size])
         reward = 0.0
 
+        if not previous_goal_count == agent.goal_count and not agent.goal_count == 0 and agent.goal_count % 20 == 0:
+            print("save " + str(iter))
+            agent.model.save('model_' + str(agent.goal_count) + '_e' + str(iter) + '.h5')
+            timeout.sleep(0.2)
+
         # Learning goes on here
         # We make sure that the agent does not get stuck
         iterator = 0
-        for time in range(5000):
+        for time in range(1000):
 
             if iterator == 0:
                 timeout.sleep(0.2)
@@ -487,9 +501,9 @@ while True:
                 # Give a penalty if agent is just still
                 reward = reward if not done else -100
 
-                #print_distance(next_state[0][0])
+                print_distance(next_state[0][0])
                 #print_rays(next_state[0])
-                print(reward)
+                #print(reward)
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
@@ -515,10 +529,6 @@ while True:
 
     reset_program(globalMessage)
     print("Total goal count: " + str(agent.goal_count))
-    if agent.epsilon <= agent.epsilon_min and agent.goal_count > 50:
-        print("This agent has figured it out!")
-        agent.model.save('robot_model_over_50_goals.h5')
-        timeout.sleep(1)
-    agent.model.save('robot_model_wall.h5')
+    agent.model.save('model_finished.h5')
     timeout.sleep(1)
     socket.context.__exit__()
