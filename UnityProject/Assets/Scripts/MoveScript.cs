@@ -20,7 +20,7 @@ public class MoveScript : MonoBehaviour
     public static Vector3 initialPosition;
     public static Quaternion initialRotation;
 
-    public float rayLength = 5f;
+    public float rayLength = 10f;
 
     public static CharacterController characterController;
 
@@ -304,7 +304,7 @@ public class MoveScript : MonoBehaviour
         if (length != 0f) {
             return length;
         } else {
-            return 5f;
+            return rayLength;
         }
     }
 

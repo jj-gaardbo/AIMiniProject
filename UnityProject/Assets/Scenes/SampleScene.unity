@@ -393,8 +393,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8c4a601fc76e9a874bad920e1d8c2962, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rayLength: 3
-  speed: 7
+  rayLength: 10
+  speed: 5
   gravity: 1
   disableWalls: 1
   walls: []
@@ -977,7 +977,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 93.14099, y: -0.000015258789, z: -0.000015258789}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -314.18, y: -290}
+  m_AnchoredPosition: {x: -337.8, y: -290}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1133377079
@@ -1013,7 +1013,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: New Text
+  m_Text: GoalCount = 0
 --- !u!222 &1133377080
 CanvasRenderer:
   m_ObjectHideFlags: 0

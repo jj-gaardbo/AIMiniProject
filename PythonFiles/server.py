@@ -8,6 +8,7 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, LeakyReLU, Softmax
 from keras.optimizers import Adam
 from keras.utils import plot_model
+import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import normalize, minmax_scale, MinMaxScaler, StandardScaler
 
@@ -21,11 +22,11 @@ timeout = time
 
 state_size = 17
 action_size = 8
-batch_size = 20
-num_of_episodes = 2000
+batch_size = 32
+num_of_episodes = 4000
 epsilon_decrease_factor = 10
 
-ray_high_tolerance = 3.5
+ray_high_tolerance = 3
 
 enable_distance_reward = True
 enable_ray_reward = True
@@ -39,14 +40,15 @@ class DQNAgent():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=4000)
-        self.gamma = 0.95
+        self.memory = deque(maxlen=10000)
+        self.gamma = 0.99
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.998
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0005
         self.model = self.model()
         self.goal_count = 0
+        self.history = None
 
     def model(self):
         model = Sequential()
@@ -58,7 +60,7 @@ class DQNAgent():
         #model.add(LeakyReLU())
         model.add(Dense(self.action_size))
         #model.add(Softmax())
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate), metrics=["accuracy"])
         plot_model(model, to_file='model.png', show_shapes=True)
         return model
 
@@ -84,7 +86,7 @@ class DQNAgent():
 
             target_f = self.model.predict(state)
             target_f[0][action] = target
-            self.model.fit(state, target_f, epochs=1, verbose=0)
+            self.history = self.model.fit(state, target_f, epochs=1, verbose=0)
 
         # We have to decrease the epsilon each time to make the actions less and less random
         if self.epsilon > self.epsilon_min:
@@ -178,7 +180,7 @@ def get_ray_array():
     rayReward = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     iter = 0
     for reward in rayReward:
-        rayReward[iter] = 0.0
+        rayReward[iter] = 1.0
         iter += 1
     return rayReward
 
@@ -200,7 +202,7 @@ def get_ray_array():
 # 15 : right+back+back
 def action_to_ray_conversion(action, ray_index):
     punish = -1.0
-    reward = 0.0
+    reward = 1.0
 
     if action == 0:  # fwd
         if ray_index == 0 or ray_index == 5 or ray_index == 8:
@@ -263,7 +265,7 @@ def ns_ray(data, last_rays, action):
         if ray <= ray_high_tolerance:
             active_rays += 1
             if last_rays[_iterator] > ray:
-                _reward -= int(abs(ray-ray_high_tolerance))
+                _reward -= int(abs(ray_high_tolerance-ray))
             _reward -= int(action_to_ray_conversion(action, _iterator))
 
         _ray_rewards[_iterator] = _reward
@@ -272,7 +274,7 @@ def ns_ray(data, last_rays, action):
     if active_rays > 0:
         _iterator = 0
         for _ray_reward in _ray_rewards:
-            _ray_rewards[_iterator] -= active_rays
+            #_ray_rewards[_iterator] -= active_rays
             _iterator += 1
 
     return _ray_rewards
@@ -305,27 +307,27 @@ def ns_distance(dist, orig_dist, last_dist):
 def get_reward(message, old_dist, last_rays, action):
     reward = 0
     if message.hasReachedGoal:
-        return 1000
+        return 100
 
     if enable_distance_reward:
         # if message.distanceToGoal < old_dist:
         #     reward = 1.0
         # else:
         #     reward = -2.0
-
-        if message.origDistanceToGoal < message.distanceToGoal:
-            reward -= 2.0
-        else:
-            reward = 1.0
+        reward += 2.0**(message.origDistanceToGoal/message.distanceToGoal)
 
     if enable_ray_reward:
         active_rays = 0
+        iter = 0
         for ray in message.rays:
             if ray <= ray_high_tolerance:
                 active_rays += 1
+                #reward -= 1.0**(ray/ray_high_tolerance)
+            #print("Ray " + str(iter) + ": " + str(reward))
+            iter += 1
 
-        if active_rays > 0:
-            reward -= active_rays
+        #if active_rays > 0:
+        #reward -= active_rays
 
     return reward
 
@@ -341,23 +343,24 @@ def get_next_state(message, last_dist, last_rays, action):
     if enable_distance_reward:
         dist_state = ns_distance(message.distanceToGoal, message.origDistanceToGoal, last_dist)
 
-    return np.array([[dist_state,
-                      ray_state[0],
-                      ray_state[1],
-                      ray_state[2],
-                      ray_state[3],
-                      ray_state[4],
-                      ray_state[5],
-                      ray_state[6],
-                      ray_state[7],
-                      ray_state[8],
-                      ray_state[9],
-                      ray_state[10],
-                      ray_state[11],
-                      ray_state[12],
-                      ray_state[13],
-                      ray_state[14],
-                      ray_state[15]]])
+    return np.array([[message.distanceToGoal,
+                      message.rays[0],
+                      message.rays[1],
+                      message.rays[2],
+                      message.rays[3],
+                      message.rays[4],
+                      message.rays[5],
+                      message.rays[6],
+                      message.rays[7],
+                      message.rays[8],
+                      message.rays[9],
+                      message.rays[10],
+                      message.rays[11],
+                      message.rays[12],
+                      message.rays[13],
+                      message.rays[14],
+                      message.rays[15]
+                      ]])
 
 
 def update_message(message):
@@ -426,8 +429,9 @@ def print_rays(rays):
 
 
 def load_old_model(agent):
-    model = load_model("model_.h5")
+    model = load_model("model_finished_34.h5")
     agent.model = model
+    agent.epsilon = agent.epsilon_min
     return agent
 
 
@@ -501,9 +505,11 @@ while True:
                 # Give a penalty if agent is just still
                 reward = reward if not done else -100
 
-                print_distance(next_state[0][0])
+                #print_distance(next_state[0][0])
+                #print(globalMessage.rays)
                 #print_rays(next_state[0])
-                #print(reward)
+                #print(next_state[0])
+                print(reward)
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
@@ -529,6 +535,6 @@ while True:
 
     reset_program(globalMessage)
     print("Total goal count: " + str(agent.goal_count))
-    agent.model.save('model_finished.h5')
+    agent.model.save('model_finished_34.h5')
     timeout.sleep(1)
     socket.context.__exit__()
