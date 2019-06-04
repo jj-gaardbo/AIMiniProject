@@ -60,6 +60,8 @@ public class MoveScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        Move();
+        
         Globals.setRays(new float[] {
             CastRay(0), 
             CastRay(1), 
@@ -87,10 +89,6 @@ public class MoveScript : MonoBehaviour
         if(Globals.done){
             resetProgram();
         }
-
-        activateWall();
-
-        Move();
     }
 
     public void activateWall(){

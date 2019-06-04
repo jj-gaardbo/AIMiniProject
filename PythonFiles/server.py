@@ -142,7 +142,6 @@ class Message():
 def handleJsonResponse(data):
     dataReceived = json.loads(data.decode('utf-8'))
     type(dataReceived)
-    print(dataReceived)
     return Message(dataReceived['move'], dataReceived['reward'], dataReceived['hasReachedGoal'], dataReceived['rays'], dataReceived['done'], dataReceived['distanceToGoal'], dataReceived['originalDistanceToGoal'], dataReceived['addWall'], dataReceived['goalCount'])
 
 
@@ -312,8 +311,6 @@ agent = DQNAgent(state_size, action_size)
 #agent = load_old_model(agent)
 
 while True:
-
-
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
     globalMessage = incoming
@@ -350,10 +347,8 @@ while True:
                 globalMessage = update_message(globalMessage)
 
                 next_state = get_next_state(globalMessage)
-                next_state = np.reshape(next_state, [1, state_size])
 
                 reward = get_reward(globalMessage, last_distance)
-                episode_reward.append(reward)
 
                 done = is_done(globalMessage)
 
@@ -368,6 +363,8 @@ while True:
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
+
+                episode_reward.append(reward)
 
                 next_state = np.reshape(state, [1, state_size])
 
