@@ -1,7 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class MoveScript : MonoBehaviour
 {
@@ -20,7 +19,7 @@ public class MoveScript : MonoBehaviour
     public static Vector3 initialPosition;
     public static Quaternion initialRotation;
 
-    public float rayLength = 10f;
+    public float rayLength = 8f;
 
     public static CharacterController characterController;
 
@@ -34,8 +33,6 @@ public class MoveScript : MonoBehaviour
 
     public bool incrementWalls = false;
 
-    public static GameObject text;
-
 
     // Start is called before the first frame update
     void Start()
@@ -43,7 +40,7 @@ public class MoveScript : MonoBehaviour
 
         walls = GameObject.FindGameObjectsWithTag("AllWalls");
 
-        if(incrementWalls && disableWalls == true){
+        if(incrementWalls || disableWalls == true){
             foreach (var wall in walls){
                 wall.SetActive(false);
             }
@@ -58,16 +55,11 @@ public class MoveScript : MonoBehaviour
         GameObject goal = GameObject.FindGameObjectWithTag("Finish");
         Globals.setOriginalDistanceToGoal(Vector3.Distance(gameObject.transform.position, goal.transform.position));
 
-        text = GameObject.FindGameObjectWithTag("UI");
     }
 
     // Update is called once per frame
     void Update()
     {
-
-        text.GetComponent<Text>().text = "GoalCount : " + Globals.goalCount;
-
-        Move();
         Globals.setRays(new float[] {
             CastRay(0), 
             CastRay(1), 
@@ -97,6 +89,8 @@ public class MoveScript : MonoBehaviour
         }
 
         activateWall();
+
+        Move();
     }
 
     public void activateWall(){
@@ -131,7 +125,6 @@ public class MoveScript : MonoBehaviour
     }
 
     public static void resetProgram(){
-        Debug.Log("Resetting program");
         Globals.resetPlayer();
         Globals.hasReachedGoal = false;
         Globals.done = false;

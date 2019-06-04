@@ -48,7 +48,6 @@ public static class Globals{
 
     public static void goalReached(){
         hasReachedGoal = true;
-        Debug.Log("Goal reached " + hasReachedGoal);
     }
 
     public static void setMoveDir(string dir){

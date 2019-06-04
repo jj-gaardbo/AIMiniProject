@@ -8,14 +8,12 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, LeakyReLU, Softmax
 from keras.optimizers import Adam
 from keras.utils import plot_model
-import matplotlib.pyplot as plt
-
-from sklearn.preprocessing import normalize, minmax_scale, MinMaxScaler, StandardScaler
+import csv
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
-timeoutamount = 0.095
+timeoutamount = 0.1
 
 globalMessage = None
 timeout = time
@@ -23,18 +21,19 @@ timeout = time
 state_size = 17
 action_size = 8
 batch_size = 32
-num_of_episodes = 4000
+num_of_episodes = 2000
 epsilon_decrease_factor = 10
 
-ray_high_tolerance = 3
-
-enable_distance_reward = True
-enable_ray_reward = True
-
-correct_move = 0
-wrong_move = 0
-
 previous_goal_count = 0
+leaky = False
+
+
+def append_to_csv(episode, data):
+    with open(r'monitor.csv', mode='a') as reward_monitor:
+        reward_monitor = csv.writer(reward_monitor, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+        reward_monitor.writerow([episode+1, np.mean(data)])
+
 
 class DQNAgent():
     def __init__(self, state_size, action_size):
@@ -45,19 +44,21 @@ class DQNAgent():
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.998
-        self.learning_rate = 0.0005
+        self.learning_rate = 0.001
         self.model = self.model()
         self.goal_count = 0
         self.history = None
 
     def model(self):
         model = Sequential()
-        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
-        #model.add(Dense(24, input_dim=self.state_size))
-        #model.add(LeakyReLU())
-        model.add(Dense(24, activation='relu'))
-        #model.add(Dense(24))
-        #model.add(LeakyReLU())
+        if leaky:
+            model.add(Dense(24, input_dim=self.state_size))
+            model.add(LeakyReLU())
+            model.add(Dense(24))
+            model.add(LeakyReLU())
+        else:
+            model.add(Dense(24, input_dim=self.state_size, activation='relu'))
+            model.add(Dense(24, activation='relu'))
         model.add(Dense(self.action_size))
         #model.add(Softmax())
         model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate), metrics=["accuracy"])
@@ -141,6 +142,7 @@ class Message():
 def handleJsonResponse(data):
     dataReceived = json.loads(data.decode('utf-8'))
     type(dataReceived)
+    print(dataReceived)
     return Message(dataReceived['move'], dataReceived['reward'], dataReceived['hasReachedGoal'], dataReceived['rays'], dataReceived['done'], dataReceived['distanceToGoal'], dataReceived['originalDistanceToGoal'], dataReceived['addWall'], dataReceived['goalCount'])
 
 
@@ -167,7 +169,7 @@ def is_done(message):
     isDone = False
 
     for ray in message.rays:
-        if float(ray) <= 0.7:
+        if float(ray) <= 0.65:
             isDone = True
             break
         else:
@@ -176,173 +178,22 @@ def is_done(message):
     return isDone
 
 
-def get_ray_array():
-    rayReward = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    iter = 0
-    for reward in rayReward:
-        rayReward[iter] = 1.0
-        iter += 1
-    return rayReward
-
-# 0 : fwd
-# 1 : back
-# 2 : left
-# 3 : right
-# 4 : left+fwd
-# 5 : left+fwd+fwd
-# 6 : fwd+left+left
-# 7 : right+fwd
-# 8 : right+fwd+fwd
-# 9 : fwd+right+right
-# 10 : left+back
-# 11 : left+back+left
-# 12 : left+back+back
-# 13 : right+back
-# 14 : right+back+right
-# 15 : right+back+back
-def action_to_ray_conversion(action, ray_index):
-    punish = -1.0
-    reward = 1.0
-
-    if action == 0:  # fwd
-        if ray_index == 0 or ray_index == 5 or ray_index == 8:
-            return punish
-        else:
-            return reward
-
-    elif action == 1:  # back
-        if ray_index == 1 or ray_index == 12 or ray_index == 15:
-            return punish
-        else:
-            return reward
-
-    elif action == 2:  # left
-        if ray_index == 2 or ray_index == 6 or ray_index == 11:
-            return punish
-        else:
-            return reward
-
-    elif action == 3:  # right
-        if ray_index == 3 or ray_index == 9 or ray_index == 14:
-            return punish
-        else:
-            return reward
-
-    elif action == 4:  # fl
-        if ray_index == 4 or ray_index == 5 or ray_index == 6:
-            return punish
-        else:
-            return reward
-
-    elif action == 5:  # fr
-        if ray_index == 7 or ray_index == 8 or ray_index == 9:
-            return punish
-        else:
-            return reward
-
-    elif action == 6:  # bl
-        if ray_index == 10 or ray_index == 11 or ray_index == 12:
-            return punish
-        else:
-            return reward
-
-    elif action == 7:  # br
-        if ray_index == 13 or ray_index == 14 or ray_index == 15:
-            return punish
-        else:
-            return reward
-
-    return 0.0
-
-
-def ns_ray(data, last_rays, action):
-    active_rays = 0
-
-    _ray_rewards = get_ray_array()
-    _iterator = 0
-    for ray in data.rays:
-        _reward = 0.0
-        if ray <= ray_high_tolerance:
-            active_rays += 1
-            if last_rays[_iterator] > ray:
-                _reward -= int(abs(ray_high_tolerance-ray))
-            _reward -= int(action_to_ray_conversion(action, _iterator))
-
-        _ray_rewards[_iterator] = _reward
-        _iterator += 1
-
-    if active_rays > 0:
-        _iterator = 0
-        for _ray_reward in _ray_rewards:
-            #_ray_rewards[_iterator] -= active_rays
-            _iterator += 1
-
-    return _ray_rewards
-
-
-def ns_distance(dist, orig_dist, last_dist):
-        global correct_move, wrong_move
-
-        if last_dist < dist: # punish when agent moves away from target
-            wrong_move -= 1
-            reward = -0.005
-        else: # reward when agent moves closer to target
-            correct_move += 1
-            reward = 0.001
-
-        if orig_dist < dist:
-            reward -= 0.01
-
-        move_factor = 1.0
-        if correct_move > 0.0:
-            move_factor += correct_move
-            wrong_move = 0.0
-        elif wrong_move < 0.0:
-            move_factor -= wrong_move
-            correct_move = 0.0
-
-        return reward*move_factor
-
-
-def get_reward(message, old_dist, last_rays, action):
-    reward = 0
+def get_reward(message, last_dist):
     if message.hasReachedGoal:
         return 100
 
-    if enable_distance_reward:
-        # if message.distanceToGoal < old_dist:
-        #     reward = 1.0
-        # else:
-        #     reward = -2.0
-        reward += 2.0**(message.origDistanceToGoal/message.distanceToGoal)
+    _reward = 2 ** (message.origDistanceToGoal/message.distanceToGoal)
 
-    if enable_ray_reward:
-        active_rays = 0
-        iter = 0
-        for ray in message.rays:
-            if ray <= ray_high_tolerance:
-                active_rays += 1
-                #reward -= 1.0**(ray/ray_high_tolerance)
-            #print("Ray " + str(iter) + ": " + str(reward))
-            iter += 1
+    if message.distanceToGoal > message.origDistanceToGoal:
+        _reward = 2 ** (message.distanceToGoal/message.origDistanceToGoal)*-1
 
-        #if active_rays > 0:
-        #reward -= active_rays
+    # if last_dist < message.distanceToGoal:
+    #     _reward -= 0.001
 
-    return reward
+    return _reward
 
 
-def get_next_state(message, last_dist, last_rays, action):
-    dist_state = 0.0
-
-    if enable_ray_reward:
-        ray_state = ns_ray(message, last_rays, action)
-    else:
-        ray_state = get_ray_array()
-
-    if enable_distance_reward:
-        dist_state = ns_distance(message.distanceToGoal, message.origDistanceToGoal, last_dist)
-
+def get_next_state(message):
     return np.array([[message.distanceToGoal,
                       message.rays[0],
                       message.rays[1],
@@ -378,7 +229,6 @@ def update_message(message):
     socket.send_string(newMessage.to_string())
     incoming = handleJsonResponse(socket.recv())
     if incoming.hasReachedGoal:
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! GOOOOOOOOOOAAAAAAAAALLLLLLLLL !!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ")
         agent.increment_goal_count()
         incoming.goalCount = agent.goal_count
 
@@ -439,49 +289,53 @@ def get_initial_state(dist, rays):
     global init_dist
     return np.array([[
         dist,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays,
-        rays
+        rays[0],
+        rays[1],
+        rays[2],
+        rays[3],
+        rays[4],
+        rays[5],
+        rays[6],
+        rays[7],
+        rays[8],
+        rays[9],
+        rays[10],
+        rays[11],
+        rays[12],
+        rays[13],
+        rays[14],
+        rays[15]
     ]])
+
 
 agent = DQNAgent(state_size, action_size)
 #agent = load_old_model(agent)
 
 while True:
+
+
     #  Wait for next request from client
     incoming = handleJsonResponse(socket.recv())
     globalMessage = incoming
 
     init_dist = globalMessage.origDistanceToGoal
-    init_ray = globalMessage.rays[0]
+    init_rays = globalMessage.rays
 
     for iter in range(num_of_episodes):
-        state = get_initial_state(init_dist, init_ray)
+        state = get_initial_state(init_dist, init_rays)
         state = np.reshape(state, [1, state_size])
         reward = 0.0
+        episode_reward = [reward]
 
         if not previous_goal_count == agent.goal_count and not agent.goal_count == 0 and agent.goal_count % 20 == 0:
             print("save " + str(iter))
-            agent.model.save('model_' + str(agent.goal_count) + '_e' + str(iter) + '.h5')
+            agent.model.save('empty_' + str(agent.goal_count) + '_e' + str(iter) + '.h5')
             timeout.sleep(0.2)
 
         # Learning goes on here
         # We make sure that the agent does not get stuck
         iterator = 0
-        for time in range(1000):
+        for time in range(500):
 
             if iterator == 0:
                 timeout.sleep(0.2)
@@ -495,10 +349,11 @@ while True:
                 last_rays = globalMessage.rays
                 globalMessage = update_message(globalMessage)
 
-                next_state = get_next_state(globalMessage, last_distance, last_rays, action)
+                next_state = get_next_state(globalMessage)
                 next_state = np.reshape(next_state, [1, state_size])
 
-                reward = get_reward(globalMessage, last_distance, last_rays, action)
+                reward = get_reward(globalMessage, last_distance)
+                episode_reward.append(reward)
 
                 done = is_done(globalMessage)
 
@@ -509,7 +364,7 @@ while True:
                 #print(globalMessage.rays)
                 #print_rays(next_state[0])
                 #print(next_state[0])
-                print(reward)
+                #print(reward)
 
                 # We want the agent to remember
                 agent.mem_remember(state, action, reward, next_state, done)
@@ -522,9 +377,10 @@ while True:
                     done = True
 
                 if done:
+                    append_to_csv(iter, episode_reward)
                     print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count) + " Reward: " + str(reward))
-                    if agent.goal_count % 2 == 0 and not previous_goal_count == agent.goal_count:
-                        globalMessage.addWall = True
+                    # if agent.goal_count % 2 == 0 and not previous_goal_count == agent.goal_count:
+                    #     globalMessage.addWall = True
                     globalMessage = reset_program(globalMessage)
                     break
 
