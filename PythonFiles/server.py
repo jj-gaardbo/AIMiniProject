@@ -22,17 +22,17 @@ state_size = 17
 action_size = 8
 batch_size = 32
 num_of_episodes = 2000
-epsilon_decrease_factor = 10
+epsilon_decrease_factor = 1
 
 previous_goal_count = 0
 leaky = False
 
 
-def append_to_csv(episode, data):
+def append_to_csv(episode, time, reward, data):
     with open(r'monitor.csv', mode='a') as reward_monitor:
         reward_monitor = csv.writer(reward_monitor, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
-        reward_monitor.writerow([episode+1, np.mean(data)])
+        reward_monitor.writerow([episode+1, time, reward, np.mean(data)])
 
 
 class DQNAgent():
@@ -43,8 +43,8 @@ class DQNAgent():
         self.gamma = 0.99
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.998
-        self.learning_rate = 0.001
+        self.epsilon_decay = 0.9995
+        self.learning_rate = 0.0001
         self.model = self.model()
         self.goal_count = 0
         self.history = None
@@ -323,6 +323,7 @@ while True:
         state = np.reshape(state, [1, state_size])
         reward = 0.0
         episode_reward = [reward]
+        episode_reward_added = 0
 
         if not previous_goal_count == agent.goal_count and not agent.goal_count == 0 and agent.goal_count % 20 == 0:
             print("save " + str(iter))
@@ -365,6 +366,7 @@ while True:
                 agent.mem_remember(state, action, reward, next_state, done)
 
                 episode_reward.append(reward)
+                episode_reward_added += reward
 
                 next_state = np.reshape(state, [1, state_size])
 
@@ -374,7 +376,7 @@ while True:
                     done = True
 
                 if done:
-                    append_to_csv(iter, episode_reward)
+                    append_to_csv(iter, iterator, episode_reward_added, episode_reward)
                     print("Episode: " + str(iter) + " Time: " + str(time) + " Epsilon: " + str(agent.epsilon) + " Goal count: " + str(agent.goal_count) + " Reward: " + str(reward))
                     # if agent.goal_count % 2 == 0 and not previous_goal_count == agent.goal_count:
                     #     globalMessage.addWall = True
@@ -388,6 +390,6 @@ while True:
 
     reset_program(globalMessage)
     print("Total goal count: " + str(agent.goal_count))
-    agent.model.save('model_finished_34.h5')
+    agent.model.save('model_finished.h5')
     timeout.sleep(1)
     socket.context.__exit__()
